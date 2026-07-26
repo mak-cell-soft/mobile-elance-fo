@@ -4,4 +4,6 @@ abstract class AppRoutes {
   static const login = '/login';
   static const home = '/home';
   static const articles = '/articles';
+  static const customers = '/customers';
+  static const settings = '/settings';
 }
