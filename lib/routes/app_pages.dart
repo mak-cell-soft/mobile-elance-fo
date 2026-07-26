@@ -5,6 +5,7 @@ import '../features/auth/bindings/auth_binding.dart';
 import '../features/auth/views/login_view.dart';
 import '../features/customers/bindings/customers_binding.dart';
 import '../features/customers/views/customers_list_view.dart';
+import '../features/home/bindings/home_binding.dart';
 import '../features/home/views/home_view.dart';
 import '../features/settings/bindings/settings_binding.dart';
 import '../features/settings/views/settings_view.dart';
@@ -29,7 +30,7 @@ abstract class AppPages {
     GetPage(
       name: AppRoutes.home,
       page: () => const HomeView(),
-      binding: AuthBinding(),
+      binding: HomeBinding(),
     ),
     GetPage(
       name: AppRoutes.articles,
