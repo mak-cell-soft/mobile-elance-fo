@@ -18,37 +18,114 @@ class ArticlesListView extends GetView<ArticlesController> {
       }
     });
 
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Articles'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () => Get.bottomSheet(
-              ArticleFilterSheet(controller: controller),
-              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-              isScrollControlled: true,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-            ),
-          ),
+          Obx(() {
+            final activeCount = controller.activeFiltersCount;
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.filter_list_rounded),
+                  tooltip: 'Filtres',
+                  onPressed: () => Get.bottomSheet(
+                    ArticleFilterSheet(controller: controller),
+                    backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                    isScrollControlled: true,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                    ),
+                  ),
+                ),
+                if (activeCount > 0)
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: colorScheme.error,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        '$activeCount',
+                        style: TextStyle(
+                          color: colorScheme.onError,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          }),
         ],
       ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             child: TextField(
               onChanged: controller.search,
-              decoration: const InputDecoration(
-                hintText: 'Rechercher un article...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: 'Rechercher un article ou référence...',
+                prefixIcon: Icon(Icons.search_rounded, color: colorScheme.primary),
                 isDense: true,
               ),
             ),
           ),
+
+          // Active filter indicator bar
+          Obx(() {
+            if (controller.activeFiltersCount == 0) {
+              return const SizedBox.shrink();
+            }
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.filter_alt_outlined, size: 14, color: colorScheme.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${controller.activeFiltersCount} filtre(s) actif(s)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: controller.clearFilters,
+                    child: Text(
+                      'Effacer',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+
           Expanded(
             child: Obx(() {
               switch (controller.status.value) {
@@ -81,10 +158,31 @@ class ArticlesListView extends GetView<ArticlesController> {
                         if (index >= articles.length) {
                           return const Padding(
                             padding: EdgeInsets.symmetric(vertical: 16),
-                            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                            child: Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
                           );
                         }
-                        return ArticleCard(article: articles[index]);
+
+                        final article = articles[index];
+                        final articleId = article.id;
+
+                        return Obx(() {
+                          final stockSummary = articleId != null
+                              ? controller.stockMap[articleId]
+                              : null;
+                          final isExpanded = articleId != null &&
+                              controller.expandedArticleId.value == articleId;
+
+                          return ArticleCard(
+                            article: article,
+                            stockSummary: stockSummary,
+                            isExpanded: isExpanded,
+                            onToggleExpand: articleId != null
+                                ? () => controller.toggleExpandArticle(articleId)
+                                : null,
+                          );
+                        });
                       },
                     ),
                   );
@@ -105,17 +203,27 @@ class _ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
-            const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
+            Icon(Icons.error_outline_rounded, size: 48, color: colorScheme.error),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: onRetry, child: const Text('Réessayer')),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Réessayer'),
+            ),
           ],
         ),
       ),
