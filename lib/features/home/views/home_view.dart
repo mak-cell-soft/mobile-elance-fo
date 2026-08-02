@@ -8,6 +8,7 @@ import '../../../core/utils/view_status.dart';
 import '../../../routes/app_routes.dart';
 import '../../profile/widgets/profile_sheet.dart';
 import '../controllers/home_controller.dart';
+import '../widgets/caisse_treasury_cards_widget.dart';
 import '../widgets/kpi_card_widget.dart';
 import '../widgets/receivables_chart_widget.dart';
 import '../widgets/supplier_chart_widget.dart';
@@ -354,6 +355,10 @@ class HomeView extends GetView<HomeController> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Caisse & Treasury Cards (Caisse Principale & Caisse par Point de Vente)
+              CaisseTreasuryCardsWidget(controller: controller),
+              const SizedBox(height: 18),
+
               // KPI Cards Grid Row: CA Mois & CA Mois Achat
               Row(
                 children: [
