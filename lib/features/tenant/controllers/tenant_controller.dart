@@ -2,6 +2,7 @@ import 'package:get/get.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/storage/storage_service.dart';
 import '../../../core/theme/tenant_theme.dart';
+import '../../../core/theme/theme_service.dart';
 import '../../../core/utils/view_status.dart';
 import '../../../routes/app_routes.dart';
 import '../models/tenant_config.dart';
@@ -67,12 +68,16 @@ class TenantController extends GetxController {
   }
 
   void _applyTheme(TenantConfig cfg) {
-    Get.changeTheme(
-      TenantTheme.build(
-        primaryColorHex: cfg.primaryColor,
-        secondaryColorHex: cfg.secondaryColor,
-      ),
-    );
+    final themeData = ThemeService.instance.isDarkMode
+        ? TenantTheme.buildDark(
+            primaryColorHex: cfg.primaryColor,
+            secondaryColorHex: cfg.secondaryColor,
+          )
+        : TenantTheme.buildLight(
+            primaryColorHex: cfg.primaryColor,
+            secondaryColorHex: cfg.secondaryColor,
+          );
+    Get.changeTheme(themeData);
   }
 
   void changeTenant() {

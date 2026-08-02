@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import '../../../core/storage/storage_service.dart';
+import '../../../core/theme/theme_service.dart';
 import '../../../core/utils/view_status.dart';
 import '../../../routes/app_routes.dart';
 import '../../profile/widgets/profile_sheet.dart';
@@ -42,6 +43,22 @@ class HomeView extends GetView<HomeController> {
         ),
         title: Text(storage.enterpriseName ?? 'WoodApp'),
         actions: [
+          Obx(() {
+            final isDark = ThemeService.instance.isDarkMode;
+            return IconButton(
+              icon: Icon(
+                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                size: 22,
+              ),
+              tooltip: isDark ? 'Passer en Mode Clair' : 'Passer en Mode Sombre',
+              onPressed: () => ThemeService.instance.toggleTheme(),
+            );
+          }),
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined, size: 24),
+            tooltip: 'Notifications',
+            onPressed: () => Get.toNamed(AppRoutes.notifications),
+          ),
           IconButton(
             icon: const Icon(Icons.account_circle_rounded, size: 28),
             tooltip: 'Mon Profil',

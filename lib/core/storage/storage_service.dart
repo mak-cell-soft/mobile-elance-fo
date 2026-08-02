@@ -14,8 +14,13 @@ class StorageService {
   static const _keyToken = 'auth_token';
   static const _keyFullName = 'auth_fullname';
   static const _keyEnterpriseName = 'auth_enterprise_name';
+  static const _keyThemeMode = 'theme_mode';
 
   static Future<void> ensureInitialized() => GetStorage.init();
+
+  // Theme Mode
+  String? get themeMode => _box.read<String>(_keyThemeMode);
+  Future<void> saveThemeMode(String mode) => _box.write(_keyThemeMode, mode);
 
   // Tenant
   String? get tenantSlug => _box.read<String>(_keyTenantSlug);
