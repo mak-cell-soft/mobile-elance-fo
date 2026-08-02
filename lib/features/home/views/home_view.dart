@@ -250,6 +250,39 @@ class HomeView extends GetView<HomeController> {
               fontSize: 14,
             ),
           ),
+          if (storage.defaultSite != null &&
+              storage.defaultSite!.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: colorScheme.onPrimary.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: colorScheme.onPrimary.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.storefront_rounded,
+                    size: 15,
+                    color: colorScheme.onPrimary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Site de vente : ${storage.defaultSite}',
+                    style: TextStyle(
+                      color: colorScheme.onPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

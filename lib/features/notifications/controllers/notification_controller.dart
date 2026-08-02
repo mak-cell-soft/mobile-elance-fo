@@ -36,6 +36,7 @@ class NotificationController extends GetxController {
 
     try {
       final userId = StorageService.instance.userId;
+      final siteId = StorageService.instance.defaultSiteId;
 
       final results = await Future.wait([
         _service.fetchUnreads(),
@@ -43,7 +44,7 @@ class NotificationController extends GetxController {
           _service.getMissedNotifications(userId)
         else
           Future.value(<TransferNotification>[]),
-        _service.fetchStockAlerts(),
+        _service.fetchStockAlerts(siteId: siteId),
       ]);
 
       systemNotifications.assignAll(results[0] as List<AppNotification>);

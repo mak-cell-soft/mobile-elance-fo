@@ -108,6 +108,25 @@ class StorageService {
         claims['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'];
   }
 
+  /// Extracts DefaultSiteId (sales site ID) from JWT claim
+  int? get defaultSiteId {
+    final claims = _jwtPayload;
+    if (claims == null) return null;
+    final val = claims['DefaultSiteId'] ??
+        claims['defaultSiteId'] ??
+        claims['SiteId'] ??
+        claims['siteId'];
+    if (val == null) return null;
+    return int.tryParse(val.toString());
+  }
+
+  /// Extracts DefaultSite address/name from JWT claim
+  String? get defaultSite {
+    final claims = _jwtPayload;
+    if (claims == null) return null;
+    return claims['DefaultSite'] ?? claims['defaultSite'];
+  }
+
   /// Extracts raw Role claim from JWT
   String? get userRole {
     final claims = _jwtPayload;

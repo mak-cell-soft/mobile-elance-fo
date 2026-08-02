@@ -1,10 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/customer.dart';
 
 class CustomerCard extends StatelessWidget {
   final Customer customer;
 
   const CustomerCard({super.key, required this.customer});
+
+  /// Triggers device phone dialer with the customer's phone number.
+  Future<void> _makePhoneCall(BuildContext context, String rawPhone) async {
+    final cleanPhone = rawPhone.replaceAll(RegExp(r'[^\d+]'), '');
+    if (cleanPhone.isEmpty) return;
+
+    final uri = Uri.parse('tel:$cleanPhone');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Impossible de composer le numéro: $rawPhone'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erreur lors du lancement de l\'appel'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,7 +106,7 @@ class CustomerCard extends StatelessWidget {
             ),
             const SizedBox(width: 12),
 
-            // Client Name, Activity Subtitle & Phone Number
+            // Client Name, Activity Subtitle & Clickable Phone Number
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -102,24 +134,36 @@ class CustomerCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   if (customer.phoneNumberOne != null &&
                       customer.phoneNumberOne!.trim().isNotEmpty)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.phone_outlined,
-                          size: 14,
-                          color: colorScheme.primary,
+                    InkWell(
+                      onTap: () => _makePhoneCall(
+                          context, customer.phoneNumberOne!.trim()),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 2, horizontal: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.phone_in_talk_rounded,
+                              size: 14,
+                              color: colorScheme.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              customer.phoneNumberOne!.trim(),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: colorScheme.primary,
+                                decoration: TextDecoration.underline,
+                                decorationColor: colorScheme.primary
+                                    .withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          customer.phoneNumberOne!.trim(),
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: colorScheme.primary,
-                          ),
-                        ),
-                      ],
+                      ),
                     )
                   else
                     Row(

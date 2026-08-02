@@ -18,11 +18,27 @@ class StockAlert {
 
   factory StockAlert.fromJson(Map<String, dynamic> json) {
     return StockAlert(
-      id: json['id'] ?? 0,
-      articleCode: json['articleCode']?.toString() ?? json['code']?.toString() ?? '',
-      designation: json['designation']?.toString() ?? json['name']?.toString() ?? 'Article',
-      currentStock: (json['currentStock'] ?? json['stock'] ?? 0).toDouble(),
-      minThreshold: (json['minThreshold'] ?? json['threshold'] ?? 0).toDouble(),
+      id: json['id'] ?? json['stockId'] ?? json['merchandiseId'] ?? 0,
+      articleCode: json['articleReference']?.toString() ??
+          json['articleCode']?.toString() ??
+          json['code']?.toString() ??
+          '',
+      designation: json['packageReference']?.toString() ??
+          json['merchandiseDescription']?.toString() ??
+          json['designation']?.toString() ??
+          json['name']?.toString() ??
+          'Article',
+      currentStock: (json['stockQuantity'] ??
+              json['currentStock'] ??
+              json['quantity'] ??
+              json['stock'] ??
+              0)
+          .toDouble(),
+      minThreshold: (json['minimumStock'] ??
+              json['minThreshold'] ??
+              json['threshold'] ??
+              0)
+          .toDouble(),
       siteName: json['siteName']?.toString(),
     );
   }
