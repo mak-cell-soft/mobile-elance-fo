@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "WOODAPP (Socofeb Preprod)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_preprod.dart",
+      "args": [
+        "--flavor",
+        "socofeb",
+        "--dart-define",
+        "TENANT_ID=socofeb",
+        "--dart-define",
+        "APP_NAME=socofeb",
+        "--dart-define",
+        "PACKAGE_NAME=com.socofeb.woodapp",
+        "--dart-define",
+        "PRIMARY_COLOR=#1B4332"
+      ]
+    },
+    {
+      "name": "WOODAPP (Development)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_development.dart",
+      "args": [
+        "--flavor",
+        "development"
+      ]
+    }
+  ]
+}

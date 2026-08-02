@@ -38,7 +38,7 @@ class TenantTheme {
         : buildLight(primaryColorHex: primaryColorHex, secondaryColorHex: secondaryColorHex);
   }
 
-  /// Builds the **Arbor Industrial Dark Theme** (Stitch UI Spec).
+  /// Builds the **Arbor Industrial Dark Theme** with high-contrast text on green elements.
   static ThemeData buildDark({
     String? primaryColorHex,
     String? secondaryColorHex,
@@ -47,11 +47,25 @@ class TenantTheme {
     final customSecondary = _parseHexColor(secondaryColorHex);
     final seed = customPrimary ?? _arborDarkPrimary;
 
-    // Build base ColorScheme from seed
+    // For Dark Mode, derive high-contrast accent colors:
+    // Bright luminous green for primary buttons/accents with dark text for extreme legibility
+    final darkPrimary = customPrimary != null
+        ? _lightenColor(customPrimary, 0.25)
+        : const Color(0xFF52B788);
+    final darkPrimaryContainer = customPrimary ?? _arborDarkPrimary;
+
     var colorScheme = ColorScheme.fromSeed(
       seedColor: seed,
       brightness: Brightness.dark,
     ).copyWith(
+      primary: darkPrimary,
+      onPrimary: const Color(0xFF041329), // High-contrast dark navy text on bright green buttons
+      primaryContainer: darkPrimaryContainer,
+      onPrimaryContainer: Colors.white, // Crisp white text on dark green containers/cards
+      secondary: customSecondary ?? const Color(0xFF74C69D),
+      onSecondary: const Color(0xFF041329),
+      secondaryContainer: customSecondary ?? const Color(0xFF2D6A4F),
+      onSecondaryContainer: Colors.white,
       surface: _arborDarkBackground,
       onSurface: _arborDarkOnSurface,
       onSurfaceVariant: _arborDarkOnSurfaceVariant,
@@ -63,13 +77,6 @@ class TenantTheme {
       error: _arborDarkError,
       errorContainer: _arborDarkErrorContainer,
     );
-
-    if (customPrimary != null) {
-      colorScheme = colorScheme.copyWith(primary: customPrimary);
-    }
-    if (customSecondary != null) {
-      colorScheme = colorScheme.copyWith(secondary: customSecondary);
-    }
 
     return _assembleThemeData(colorScheme: colorScheme);
   }
@@ -87,19 +94,18 @@ class TenantTheme {
       seedColor: seed,
       brightness: Brightness.light,
     ).copyWith(
+      primary: customPrimary ?? _arborLightPrimary,
+      onPrimary: Colors.white,
+      primaryContainer: const Color(0xFFD8F3DC),
+      onPrimaryContainer: const Color(0xFF082015),
+      secondary: customSecondary ?? const Color(0xFF2D6A4F),
+      onSecondary: Colors.white,
       surface: _arborLightBackground,
       onSurface: _arborLightOnSurface,
       onSurfaceVariant: _arborLightOnSurfaceVariant,
       surfaceContainer: _arborLightSurfaceContainer,
       outline: _arborLightOutline,
     );
-
-    if (customPrimary != null) {
-      colorScheme = colorScheme.copyWith(primary: customPrimary);
-    }
-    if (customSecondary != null) {
-      colorScheme = colorScheme.copyWith(secondary: customSecondary);
-    }
 
     return _assembleThemeData(colorScheme: colorScheme);
   }
@@ -166,7 +172,7 @@ class TenantTheme {
         hintStyle: TextStyle(color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
       ),
 
-      // Primary Button styling (Forest Green / Brand Primary)
+      // Primary Button styling (High contrast button text)
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           elevation: 0,
@@ -187,6 +193,8 @@ class TenantTheme {
       // Filled button alternative styling
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
+          backgroundColor: colorScheme.primary,
+          foregroundColor: colorScheme.onPrimary,
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
@@ -212,6 +220,19 @@ class TenantTheme {
             color: colorScheme.primary,
           ),
         ),
+      ),
+
+      // Action & Choice Chips styling
+      chipTheme: ChipThemeData(
+        backgroundColor: colorScheme.surfaceContainerHigh,
+        disabledColor: colorScheme.surfaceContainerLow,
+        selectedColor: colorScheme.primaryContainer,
+        secondarySelectedColor: colorScheme.primaryContainer,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        labelStyle: TextStyle(color: colorScheme.onSurface, fontSize: 13, fontWeight: FontWeight.w500),
+        secondaryLabelStyle: TextStyle(color: colorScheme.onPrimaryContainer, fontSize: 13),
+        brightness: colorScheme.brightness,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
 
       // Floating Action Button
@@ -291,5 +312,12 @@ class TenantTheme {
     final parsed = int.tryParse(value, radix: 16);
     if (parsed == null) return null;
     return Color(parsed);
+  }
+
+  /// Helper function to derive a lighter variant of a color for dark mode legibility.
+  static Color _lightenColor(Color color, [double amount = 0.25]) {
+    final hsl = HSLColor.fromColor(color);
+    final lightness = (hsl.lightness + amount).clamp(0.0, 1.0);
+    return hsl.withLightness(lightness).toColor();
   }
 }

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
+import '../../../core/config/tenant_build_config.dart';
 import '../../../core/storage/storage_service.dart';
 import '../../../routes/app_routes.dart';
+import '../../tenant/models/tenant_config.dart';
 
 /// Animated splash view featuring the Stitch WoodApp logo with a smooth
 /// scale & fade entrance animation, redirecting based on stored local state.
@@ -48,12 +50,14 @@ class _SplashViewState extends State<SplashView> with SingleTickerProviderStateM
     super.dispose();
   }
 
-  void _redirect() {
+  void _redirect() async {
     final storage = StorageService.instance;
 
+    // Auto-seed tenant config if not already stored
     if (storage.tenantSlug == null) {
-      Get.offAllNamed(AppRoutes.tenantSelection);
-      return;
+      final embeddedConfig = TenantConfig.fromBuildConfig();
+      await storage.saveTenantSlug(TenantBuildConfig.tenantId);
+      await storage.saveTenantConfig(embeddedConfig.toJson());
     }
 
     if (!storage.isLoggedIn) {
@@ -112,13 +116,13 @@ class _SplashViewState extends State<SplashView> with SingleTickerProviderStateM
                           ),
                         ),
                         child: SvgPicture.asset(
-                          'assets/images/logo.svg',
+                          TenantBuildConfig.logoPath,
                           fit: BoxFit.contain,
                         ),
                       ),
                       const SizedBox(height: 24),
                       Text(
-                        'WoodApp',
+                        TenantBuildConfig.appName,
                         style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: colorScheme.primary,

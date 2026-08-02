@@ -1,18 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
+import '../../../core/config/tenant_build_config.dart';
 import '../../../core/utils/view_status.dart';
 import '../../../routes/app_routes.dart';
 import '../controllers/tenant_controller.dart';
 
 /// Tenant Selection screen built with Stitch UI standards.
-/// Allows users to select their enterprise organization before login.
+/// If the app is built for a specific embedded tenant (e.g. socofeb),
+/// this screen auto-redirects directly to the Login screen.
 class TenantSelectionView extends GetView<TenantController> {
   const TenantSelectionView({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final textController = TextEditingController(text: controller.slug.value);
+    // If APK is compiled for a specific tenant, bypass slug entry and go straight to Login
+    if (TenantBuildConfig.isEmbedded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Get.offAllNamed(AppRoutes.login);
+      });
+    }
+
+    final initialSlug = controller.slug.value.isNotEmpty
+        ? controller.slug.value
+        : (TenantBuildConfig.isEmbedded ? TenantBuildConfig.tenantId : 'socofeb');
+    final textController = TextEditingController(text: initialSlug);
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -43,13 +55,13 @@ class TenantSelectionView extends GetView<TenantController> {
                     ),
                   ),
                   child: SvgPicture.asset(
-                    'assets/images/logo.svg',
+                    TenantBuildConfig.logoPath,
                     fit: BoxFit.contain,
                   ),
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Bienvenue sur WoodApp',
+                  'Bienvenue sur ${TenantBuildConfig.appName}',
                   style: Theme.of(context).textTheme.headlineSmall,
                   textAlign: TextAlign.center,
                 ),
@@ -78,7 +90,7 @@ class TenantSelectionView extends GetView<TenantController> {
                           textInputAction: TextInputAction.go,
                           autocorrect: false,
                           decoration: InputDecoration(
-                            hintText: 'ex: socobois',
+                            hintText: 'ex: socofeb',
                             prefixIcon: Icon(
                               Icons.business_rounded,
                               color: colorScheme.primary,
@@ -87,7 +99,7 @@ class TenantSelectionView extends GetView<TenantController> {
                           onSubmitted: (_) => _submit(textController.text),
                         ),
                         const SizedBox(height: 16),
-                        
+
                         // Suggestion chip
                         Text(
                           'Exemples rapides :',
@@ -100,11 +112,11 @@ class TenantSelectionView extends GetView<TenantController> {
                           spacing: 8,
                           children: [
                             ActionChip(
-                              label: const Text('socobois'),
+                              label: const Text('socofeb'),
                               avatar: const Icon(Icons.apartment, size: 16),
                               onPressed: () {
-                                textController.text = 'socobois';
-                                _submit('socobois');
+                                textController.text = 'socofeb';
+                                _submit('socofeb');
                               },
                             ),
                           ],

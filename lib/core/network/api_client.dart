@@ -31,4 +31,11 @@ class ApiClient {
   late final Dio _dio;
 
   Dio get dio => _dio;
+
+  /// Dynamically updates the API base URL for the active tenant.
+  void setBaseUrl(String url) {
+    if (url.trim().isNotEmpty) {
+      _dio.options.baseUrl = url.endsWith('/') ? url : '$url/';
+    }
+  }
 }

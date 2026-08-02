@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import '../../../core/config/tenant_build_config.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/storage/storage_service.dart';
 import '../../../core/theme/tenant_theme.dart';
@@ -81,6 +82,10 @@ class TenantController extends GetxController {
   }
 
   void changeTenant() {
+    if (TenantBuildConfig.isEmbedded) {
+      // Pre-configured tenant apps are locked to their company app.
+      return;
+    }
     StorageService.instance.clearTenant();
     StorageService.instance.clearSession();
     config.value = null;

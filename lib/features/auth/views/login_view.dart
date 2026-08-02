@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
+import '../../../core/config/tenant_build_config.dart';
 import '../../../core/storage/storage_service.dart';
 import '../../../core/utils/view_status.dart';
 import '../../../routes/app_routes.dart';
@@ -9,7 +10,7 @@ import '../../tenant/models/tenant_config.dart';
 import '../controllers/auth_controller.dart';
 
 /// Modern Login screen built with Stitch UI standards.
-/// Displays active tenant branding or default WoodApp SVG logo.
+/// Displays active tenant branding or pre-configured company parameters.
 class LoginView extends GetView<AuthController> {
   LoginView({super.key});
 
@@ -26,6 +27,11 @@ class LoginView extends GetView<AuthController> {
     final passwordController = TextEditingController();
     final tenant = _tenantConfig;
     final colorScheme = Theme.of(context).colorScheme;
+
+    final displayName = tenant?.companyName ??
+        tenant?.appName ??
+        tenant?.name ??
+        TenantBuildConfig.appName;
 
     return Scaffold(
       body: SafeArea(
@@ -54,61 +60,29 @@ class LoginView extends GetView<AuthController> {
                       color: colorScheme.primary.withValues(alpha: 0.1),
                     ),
                   ),
-                  child: tenant?.logoUrl != null
+                  child: (tenant?.logoUrl != null && tenant!.logoUrl!.isNotEmpty)
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: CachedNetworkImage(
-                            imageUrl: tenant!.logoUrl!,
+                            imageUrl: tenant.logoUrl!,
                             fit: BoxFit.contain,
                             errorWidget: (_, _, _) => SvgPicture.asset(
-                              'assets/images/logo.svg',
+                              TenantBuildConfig.logoPath,
                               fit: BoxFit.contain,
                             ),
                           ),
                         )
                       : SvgPicture.asset(
-                          'assets/images/logo.svg',
+                          TenantBuildConfig.logoPath,
                           fit: BoxFit.contain,
                         ),
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  tenant?.name ?? 'Connexion',
+                  displayName,
                   style: Theme.of(context).textTheme.headlineSmall,
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 6),
-                
-                // Tenant Switcher Badge
-                InkWell(
-                  onTap: () => Get.offAllNamed(AppRoutes.tenantSelection),
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primaryContainer.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.apartment_rounded, size: 14, color: colorScheme.primary),
-                        const SizedBox(width: 6),
-                        Text(
-                          StorageService.instance.tenantSlug ?? 'Changer d\'entreprise',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(Icons.swap_horiz_rounded, size: 14, color: colorScheme.primary),
-                      ],
-                    ),
-                  ),
-                ),
-
                 const SizedBox(height: 32),
 
                 // Credentials Form Card

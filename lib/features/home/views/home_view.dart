@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
+import '../../../core/config/tenant_build_config.dart';
 import '../../../core/storage/storage_service.dart';
 import '../../../core/theme/theme_service.dart';
 import '../../../core/utils/view_status.dart';
@@ -36,12 +37,12 @@ class HomeView extends GetView<HomeController> {
               ),
             ),
             child: SvgPicture.asset(
-              'assets/images/logo.svg',
+              TenantBuildConfig.logoPath,
               fit: BoxFit.contain,
             ),
           ),
         ),
-        title: Text(storage.enterpriseName ?? 'WoodApp'),
+        title: Text(storage.enterpriseName ?? TenantBuildConfig.appName),
         actions: [
           Obx(() {
             final isDark = ThemeService.instance.isDarkMode;

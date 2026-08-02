@@ -1,0 +1,17 @@
+{
+  "tenantId": "socofeb",
+  "companyName": "SOCOFEB",
+  "appName": "socofeb",
+  "packageName": "com.socofeb.woodapp",
+  "name": "socofeb",
+  "logo": "assets/tenants/socofeb/logo.svg",
+  "primaryColor": "#1B4332",
+  "secondaryColor": "#2D6A4F",
+  "baseUrl": "https://acya.site/api/",
+  "environment": "production",
+  "supportedLocales": "fr",
+  "assetsPath": "assets/tenants/socofeb/",
+  "language": "fr",
+  "currency": "MAD",
+  "status": "Active"
+}
