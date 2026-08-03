@@ -31,12 +31,28 @@ class HomeController extends GetxController {
   final selectedMonth = DateTime.now().month.obs;
   final receivablesSearchQuery = ''.obs;
 
+  // Separate Treasury view status for independent error/loading handling
+  final treasuryStatus = ViewStatus.initial.obs;
+  final treasuryErrorMessage = RxnString();
+
   @override
   void onInit() {
     super.onInit();
+    // NOTE: Treasury caisse data (Caisse Principale & Point de Vente) is essential for all
+    // authenticated roles, not just Admins. We trigger treasury loading unconditionally on init.
+    loadTreasuryData();
+
     if (storage.isAdmin) {
       loadAdminAnalytics();
     }
+  }
+
+  /// Unified refresh handler for pull-to-refresh action in HomeView
+  Future<void> loadData() async {
+    await Future.wait([
+      loadTreasuryData(),
+      if (storage.isAdmin) loadAdminAnalytics(),
+    ]);
   }
 
   /// Computed total cash balance across all store site caisses.
@@ -44,7 +60,30 @@ class HomeController extends GetxController {
     return siteCaisseBalances.fold(0.0, (sum, site) => sum + site.currentBalance);
   }
 
-  /// Loads admin analytics and treasury caisse balances concurrently from the backend API.
+  /// Loads Caisse Principale & Caisse par Point de Vente balances independently from the backend API.
+  /// Decoupled from analytics so network or permission failures in analytics never suppress treasury cards.
+  Future<void> loadTreasuryData() async {
+    treasuryStatus.value = ViewStatus.loading;
+    treasuryErrorMessage.value = null;
+
+    try {
+      // Fetch central vault balance and site caisse balances concurrently
+      final results = await Future.wait([
+        _treasuryService.fetchCaissePrincipaleBalance(),
+        _treasuryService.fetchAllCaisseBalances(),
+      ]);
+
+      caissePrincipaleBalance.value = results[0] as double;
+      siteCaisseBalances.assignAll(results[1] as List<SiteCaisseBalanceDto>);
+      treasuryStatus.value = ViewStatus.success;
+    } catch (e) {
+      // NOTE: Fallback gracefully to zero balance on error so app stays responsive
+      treasuryStatus.value = ViewStatus.error;
+      treasuryErrorMessage.value = 'Impossible de charger la trésorerie caisses';
+    }
+  }
+
+  /// Loads admin analytics KPI metrics & charts concurrently from the backend API.
   Future<void> loadAdminAnalytics() async {
     status.value = ViewStatus.loading;
     errorMessage.value = null;
@@ -63,27 +102,21 @@ class HomeController extends GetxController {
           year: selectedYear.value,
           month: selectedMonth.value,
         ),
-        _treasuryService.fetchCaissePrincipaleBalance(),
-        _treasuryService.fetchAllCaisseBalances(),
       ]);
 
       final kpis = results[0] as DashboardKpiDto;
       final purchasesTtc = results[1] as double;
       final chartData = results[2] as List<SupplierChartPointDto>;
-      final mainCaisse = results[3] as double;
-      final siteCaisses = results[4] as List<SiteCaisseBalanceDto>;
 
       monthlySales.value = kpis.monthlySales;
       monthlyPurchaseTtc.value = purchasesTtc;
       customerReceivables.assignAll(kpis.customerReceivables);
       supplierChartPoints.assignAll(chartData);
-      caissePrincipaleBalance.value = mainCaisse;
-      siteCaisseBalances.assignAll(siteCaisses);
 
       status.value = ViewStatus.success;
     } catch (e) {
       status.value = ViewStatus.error;
-      errorMessage.value = 'Impossible de charger les données analytiques et trésorerie';
+      errorMessage.value = 'Impossible de charger les données analytiques (Admin)';
     }
   }
 

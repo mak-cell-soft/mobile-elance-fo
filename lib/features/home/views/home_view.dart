@@ -70,9 +70,8 @@ class HomeView extends GetView<HomeController> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          if (storage.isAdmin) {
-            await controller.loadAdminAnalytics();
-          }
+          // Unified refresh for all sections
+          await controller.loadData();
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -85,7 +84,13 @@ class HomeView extends GetView<HomeController> {
 
               const SizedBox(height: 24),
 
-              // --- 2. ADMIN ONLY ANALYTICS DASHBOARD ---
+              // --- 2. CAISSE & TREASURY CARDS (Caisse Principale & Caisse par Point de Vente) ---
+              // Visible to all authenticated users regardless of admin status or analytics errors
+              _buildTreasurySection(context, colorScheme),
+
+              const SizedBox(height: 24),
+
+              // --- 3. ADMIN ONLY ANALYTICS DASHBOARD ---
               if (storage.isAdmin) ...[
                 _buildAdminAnalyticsSection(context, colorScheme),
                 const SizedBox(height: 28),
@@ -289,6 +294,55 @@ class HomeView extends GetView<HomeController> {
     );
   }
 
+  /// Builds the Treasury Section containing Caisse Principale & Caisse par Point de Vente Cards.
+  /// Decoupled from Admin Analytics so failure in one does not hide the other.
+  Widget _buildTreasurySection(BuildContext context, ColorScheme colorScheme) {
+    return Obx(() {
+      if (controller.treasuryStatus.value == ViewStatus.loading &&
+          controller.caissePrincipaleBalance.value == 0.0) {
+        return Container(
+          height: 120,
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
+      }
+
+      if (controller.treasuryStatus.value == ViewStatus.error &&
+          controller.caissePrincipaleBalance.value == 0.0) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: colorScheme.errorContainer.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.account_balance_wallet_outlined, color: colorScheme.error),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  controller.treasuryErrorMessage.value ?? 'Erreur lors du chargement de la trésorerie',
+                  style: TextStyle(color: colorScheme.error, fontSize: 13),
+                ),
+              ),
+              TextButton(
+                onPressed: () => controller.loadTreasuryData(),
+                child: const Text('Réessayer'),
+              ),
+            ],
+          ),
+        );
+      }
+
+      return CaisseTreasuryCardsWidget(controller: controller);
+    });
+  }
+
   /// Builds the Admin Analytics Section containing KPI Cards & Financial Charts.
   Widget _buildAdminAnalyticsSection(BuildContext context, ColorScheme colorScheme) {
     return Column(
@@ -355,10 +409,6 @@ class HomeView extends GetView<HomeController> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Caisse & Treasury Cards (Caisse Principale & Caisse par Point de Vente)
-              CaisseTreasuryCardsWidget(controller: controller),
-              const SizedBox(height: 18),
-
               // KPI Cards Grid Row: CA Mois & CA Mois Achat
               Row(
                 children: [

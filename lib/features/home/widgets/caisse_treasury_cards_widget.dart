@@ -63,7 +63,7 @@ class _CaisseTreasuryCardsWidgetState extends State<CaisseTreasuryCardsWidget> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Trésorerie Caisses (Admin)',
+                    'Trésorerie Caisses',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.2,
