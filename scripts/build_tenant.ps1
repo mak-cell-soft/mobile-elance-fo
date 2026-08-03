@@ -31,7 +31,16 @@ flutter build $BuildMode `
     --dart-define=ASSETS_PATH="assets/tenants/$TenantId/"
 
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "SUCCESS! Built APK for $TenantId at build/app/outputs/flutter-apk/" -ForegroundColor Green
+    $dateStr = Get-Date -Format "dd_MM_yyyy"
+    $sourceApk = "build\app\outputs\flutter-apk\app-$TenantId-release.apk"
+    $datedApk = "build\app\outputs\flutter-apk\app-$TenantId-release-$dateStr.apk"
+    
+    if (Test-Path $sourceApk) {
+        Copy-Item $sourceApk $datedApk -Force
+        Write-Host "SUCCESS! Created date-stamped release APK: $datedApk" -ForegroundColor Green
+    } else {
+        Write-Host "SUCCESS! Built APK for $TenantId at build/app/outputs/flutter-apk/" -ForegroundColor Green
+    }
 } else {
     Write-Host "BUILD FAILED for $TenantId" -ForegroundColor Red
 }
