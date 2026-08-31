@@ -30,9 +30,10 @@ class AnalyticsService {
     }
   }
 
-  /// Calculates total monthly purchase amount TTC (Achats TTC) by fetching
+  /// Calculates total purchase amount TTC (Achats TTC) by fetching
   /// supplier invoices (type 3) and subtracting supplier return invoices (type 7).
-  Future<double> fetchMonthlyPurchaseTtc({required int year, required int month}) async {
+  /// If [month] is null, calculates for the entire selected [year].
+  Future<double> fetchMonthlyPurchaseTtc({required int year, int? month}) async {
     try {
       final responses = await Future.wait([
         _dio.get('Document/_type', queryParameters: {'_type': 3}),
@@ -47,9 +48,11 @@ class AnalyticsService {
         final dateStr = doc['creationdate'] ?? doc['creationDate'] ?? doc['CreationDate'];
         if (dateStr != null) {
           final date = DateTime.tryParse(dateStr.toString());
-          if (date != null && date.year == year && date.month == month) {
-            final val = (doc['total_net_ttc'] ?? doc['totalNetTtc'] ?? doc['totalCostPriceTtc'] ?? 0) as num;
-            totalInvoices += val.toDouble();
+          if (date != null && date.year == year) {
+            if (month == null || date.month == month) {
+              final val = (doc['total_net_ttc'] ?? doc['totalNetTtc'] ?? doc['totalCostPriceTtc'] ?? 0) as num;
+              totalInvoices += val.toDouble();
+            }
           }
         }
       }
@@ -59,9 +62,11 @@ class AnalyticsService {
         final dateStr = doc['creationdate'] ?? doc['creationDate'] ?? doc['CreationDate'];
         if (dateStr != null) {
           final date = DateTime.tryParse(dateStr.toString());
-          if (date != null && date.year == year && date.month == month) {
-            final val = (doc['total_net_ttc'] ?? doc['totalNetTtc'] ?? doc['totalCostPriceTtc'] ?? 0) as num;
-            totalReturns += val.toDouble();
+          if (date != null && date.year == year) {
+            if (month == null || date.month == month) {
+              final val = (doc['total_net_ttc'] ?? doc['totalNetTtc'] ?? doc['totalCostPriceTtc'] ?? 0) as num;
+              totalReturns += val.toDouble();
+            }
           }
         }
       }

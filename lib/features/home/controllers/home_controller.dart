@@ -26,10 +26,72 @@ class HomeController extends GetxController {
   final caissePrincipaleBalance = 0.0.obs;
   final siteCaisseBalances = <SiteCaisseBalanceDto>[].obs;
 
-  // Filters state
+  // Filters state (matching Next.js elance-app.ui analytics page)
   final selectedYear = DateTime.now().year.obs;
-  final selectedMonth = DateTime.now().month.obs;
+  final selectedMonth = RxnInt(DateTime.now().month); // null = "Tous les mois" (ALL), 1..12
   final receivablesSearchQuery = ''.obs;
+
+  /// Month options mapping matching fo-acya-app/elance-app.ui
+  static const Map<int?, String> monthOptions = {
+    null: 'Tous les mois',
+    1: 'Janvier',
+    2: 'Février',
+    3: 'Mars',
+    4: 'Avril',
+    5: 'Mai',
+    6: 'Juin',
+    7: 'Juillet',
+    8: 'Août',
+    9: 'Septembre',
+    10: 'Octobre',
+    11: 'Novembre',
+    12: 'Décembre',
+  };
+
+  /// Dynamic list of years (Current Year, Current Year - 1, Current Year - 2)
+  List<int> get availableYears {
+    final currentYear = DateTime.now().year;
+    return [currentYear, currentYear - 1, currentYear - 2];
+  }
+
+  /// Updates selected year filter and triggers analytics refetch
+  void updateYear(int year) {
+    if (selectedYear.value != year) {
+      selectedYear.value = year;
+      loadAdminAnalytics();
+    }
+  }
+
+  /// Updates selected month filter and triggers analytics refetch
+  void updateMonth(int? month) {
+    if (selectedMonth.value != month) {
+      selectedMonth.value = month;
+      loadAdminAnalytics();
+    }
+  }
+
+  /// Dynamic title for sales KPI card
+  String get salesKpiTitle => selectedMonth.value == null ? 'CA Année' : 'CA Mois';
+
+  /// Dynamic period badge for sales KPI card
+  String get salesPeriodLabel {
+    if (selectedMonth.value == null) {
+      return 'Année ${selectedYear.value}';
+    }
+    final isCurrentMonth = selectedMonth.value == DateTime.now().month && selectedYear.value == DateTime.now().year;
+    return isCurrentMonth ? 'Ce mois' : monthOptions[selectedMonth.value] ?? 'Ce mois';
+  }
+
+  /// Dynamic title for purchases KPI card
+  String get purchasesKpiTitle => selectedMonth.value == null ? 'CA Année Achat' : 'CA Mois Achat';
+
+  /// Dynamic period badge for purchases KPI card
+  String get purchasesPeriodLabel {
+    if (selectedMonth.value == null) {
+      return 'Achats (Année)';
+    }
+    return 'Achats (TTC)';
+  }
 
   // Separate Treasury view status for independent error/loading handling
   final treasuryStatus = ViewStatus.initial.obs;
@@ -38,20 +100,16 @@ class HomeController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    // NOTE: Treasury caisse data (Caisse Principale & Point de Vente) is essential for all
-    // authenticated roles, not just Admins. We trigger treasury loading unconditionally on init.
+    // Load treasury caisse data and executive analytics data on initialization
     loadTreasuryData();
-
-    if (storage.isAdmin) {
-      loadAdminAnalytics();
-    }
+    loadAdminAnalytics();
   }
 
   /// Unified refresh handler for pull-to-refresh action in HomeView
   Future<void> loadData() async {
     await Future.wait([
       loadTreasuryData(),
-      if (storage.isAdmin) loadAdminAnalytics(),
+      loadAdminAnalytics(),
     ]);
   }
 

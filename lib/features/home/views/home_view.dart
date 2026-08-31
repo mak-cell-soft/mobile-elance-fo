@@ -8,6 +8,7 @@ import '../../../core/utils/view_status.dart';
 import '../../../routes/app_routes.dart';
 import '../../profile/widgets/profile_sheet.dart';
 import '../controllers/home_controller.dart';
+import '../widgets/analytics_filter_bar_widget.dart';
 import '../widgets/caisse_treasury_cards_widget.dart';
 import '../widgets/kpi_card_widget.dart';
 import '../widgets/receivables_chart_widget.dart';
@@ -90,11 +91,9 @@ class HomeView extends GetView<HomeController> {
 
               const SizedBox(height: 24),
 
-              // --- 3. ADMIN ONLY ANALYTICS DASHBOARD ---
-              if (storage.isAdmin) ...[
-                _buildAdminAnalyticsSection(context, colorScheme),
-                const SizedBox(height: 28),
-              ],
+              // --- 3. ANALYTICS DASHBOARD ---
+              _buildAnalyticsSection(context, colorScheme),
+              const SizedBox(height: 28),
 
               // --- 3. MODULES & OUTILS SECTION ---
               Text(
@@ -343,16 +342,17 @@ class HomeView extends GetView<HomeController> {
     });
   }
 
-  /// Builds the Admin Analytics Section containing KPI Cards & Financial Charts.
-  Widget _buildAdminAnalyticsSection(BuildContext context, ColorScheme colorScheme) {
+  /// Builds the Analytics Section containing Year & Month selector, KPI Cards & Financial Charts.
+  Widget _buildAnalyticsSection(BuildContext context, ColorScheme colorScheme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Section Header Row with Refresh action
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Aperçu Analytique (Admin)',
+              'Aperçu Analytique',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -364,7 +364,11 @@ class HomeView extends GetView<HomeController> {
             ),
           ],
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 10),
+
+        // Year & Month Selection Filter Bar (matching Next.js fo-acya-app/elance-app.ui)
+        AnalyticsFilterBarWidget(controller: controller),
+        const SizedBox(height: 16),
 
         Obx(() {
           if (controller.status.value == ViewStatus.loading) {
@@ -409,26 +413,26 @@ class HomeView extends GetView<HomeController> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // KPI Cards Grid Row: CA Mois & CA Mois Achat
+              // KPI Cards Grid Row: CA (Mois / Année) & CA Achat (Mois / Année)
               Row(
                 children: [
                   Expanded(
                     child: KpiCardWidget(
-                      title: 'CA Mois',
+                      title: controller.salesKpiTitle,
                       value: controller.monthlySales.value,
                       icon: Icons.trending_up_rounded,
                       accentColor: const Color(0xFF10B981), // Emerald
-                      periodLabel: 'Ce mois',
+                      periodLabel: controller.salesPeriodLabel,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: KpiCardWidget(
-                      title: 'CA Mois Achat',
+                      title: controller.purchasesKpiTitle,
                       value: controller.monthlyPurchaseTtc.value,
                       icon: Icons.shopping_bag_outlined,
                       accentColor: const Color(0xFFD97706), // Amber
-                      periodLabel: 'Achats TTC',
+                      periodLabel: controller.purchasesPeriodLabel,
                       isPurchase: true,
                     ),
                   ),
