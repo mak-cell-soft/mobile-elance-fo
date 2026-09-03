@@ -131,6 +131,20 @@ class HomeView extends GetView<HomeController> {
                 onTap: () => Get.toNamed(AppRoutes.customers),
               ),
 
+              // Module Card: Chantiers (Général, Suivi & Caisse)
+              if (storage.hasChantierModule) ...[
+                const SizedBox(height: 12),
+                _buildModuleCard(
+                  context,
+                  title: 'Gestion des Chantiers',
+                  description: 'Général, suivi d\'avancement & caisse terrain',
+                  icon: Icons.construction_rounded,
+                  iconColor: const Color(0xFF2563EB),
+                  backgroundColor: const Color(0xFFEFF6FF),
+                  onTap: () => Get.toNamed(AppRoutes.chantiers),
+                ),
+              ],
+
               // Module Card: Paramètres Système (Admin Only)
               if (storage.isAdmin) ...[
                 const SizedBox(height: 12),
