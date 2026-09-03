@@ -1,4 +1,6 @@
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
+import '../core/storage/storage_service.dart';
 import '../features/articles/bindings/articles_binding.dart';
 import '../features/articles/views/articles_list_view.dart';
 import '../features/auth/bindings/auth_binding.dart';
@@ -51,11 +53,13 @@ abstract class AppPages {
       name: AppRoutes.chantiers,
       page: () => const ChantiersListView(),
       binding: ChantiersBinding(),
+      middlewares: [ChantierGuardMiddleware()],
     ),
     GetPage(
       name: AppRoutes.chantierDetail,
       page: () => const ChantierDetailView(),
       binding: ChantiersBinding(),
+      middlewares: [ChantierGuardMiddleware()],
     ),
     GetPage(
       name: AppRoutes.settings,
@@ -68,4 +72,15 @@ abstract class AppPages {
       binding: NotificationsBinding(),
     ),
   ];
+}
+
+/// Route guard redirecting to Home if the active tenant does not have the Chantier module.
+class ChantierGuardMiddleware extends GetMiddleware {
+  @override
+  RouteSettings? redirect(String? route) {
+    if (!StorageService.instance.hasChantierModule) {
+      return const RouteSettings(name: AppRoutes.home);
+    }
+    return null;
+  }
 }

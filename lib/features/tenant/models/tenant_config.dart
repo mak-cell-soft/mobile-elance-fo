@@ -20,6 +20,7 @@ class TenantConfig {
   final String? language;
   final String? currency;
   final String? status;
+  final bool hasChantierModule;
 
   TenantConfig({
     this.tenantId,
@@ -39,6 +40,7 @@ class TenantConfig {
     this.language,
     this.currency,
     this.status,
+    this.hasChantierModule = true,
   });
 
   bool get isActive => status != 'Suspended' && status != 'Expired';
@@ -60,10 +62,15 @@ class TenantConfig {
       assetsPath: TenantBuildConfig.assetsPath,
       language: TenantBuildConfig.supportedLocales,
       status: 'Active',
+      hasChantierModule: TenantBuildConfig.hasChantierModule,
     );
   }
 
   factory TenantConfig.fromJson(Map<String, dynamic> json) {
+    final bool hasChantier = json['hasChantierModule'] as bool? ??
+        json['hasChantiers'] as bool? ??
+        TenantBuildConfig.hasChantierModule;
+
     return TenantConfig(
       tenantId: json['tenantId']?.toString() ?? TenantBuildConfig.tenantId,
       companyName: json['companyName']?.toString() ?? json['name']?.toString() ?? TenantBuildConfig.companyName,
@@ -82,6 +89,7 @@ class TenantConfig {
       language: json['language']?.toString() ?? TenantBuildConfig.supportedLocales,
       currency: json['currency']?.toString() ?? 'MAD',
       status: json['status']?.toString() ?? 'Active',
+      hasChantierModule: hasChantier,
     );
   }
 
@@ -103,5 +111,7 @@ class TenantConfig {
         'language': language ?? TenantBuildConfig.supportedLocales,
         if (currency != null) 'currency': currency,
         'status': status ?? 'Active',
+        'hasChantierModule': hasChantierModule,
+        'hasChantiers': hasChantierModule,
       };
 }

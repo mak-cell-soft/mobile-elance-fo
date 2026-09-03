@@ -9,7 +9,8 @@ param (
     [string]$SecondaryColor = "#2D6A4F",
     [string]$BaseUrl = "https://acya.site/api/",
     [string]$Target = "lib/main_preprod.dart",
-    [string]$BuildMode = "apk"
+    [string]$BuildMode = "apk",
+    [bool]$HasChantierModule = $true
 )
 
 Write-Host "==========================================" -ForegroundColor Green
@@ -17,6 +18,7 @@ Write-Host "Building Multi-Tenant App: $AppName ($TenantId)" -ForegroundColor Gr
 Write-Host "Target Entrypoint: $Target" -ForegroundColor Yellow
 Write-Host "Package ID: $PackageName" -ForegroundColor Yellow
 Write-Host "Primary Color: $PrimaryColor" -ForegroundColor Yellow
+Write-Host "Chantier Module: $HasChantierModule" -ForegroundColor Yellow
 Write-Host "==========================================" -ForegroundColor Green
 
 flutter build $BuildMode `
@@ -28,7 +30,8 @@ flutter build $BuildMode `
     --dart-define=PRIMARY_COLOR=$PrimaryColor `
     --dart-define=SECONDARY_COLOR=$SecondaryColor `
     --dart-define=BASE_URL=$BaseUrl `
-    --dart-define=ASSETS_PATH="assets/tenants/$TenantId/"
+    --dart-define=ASSETS_PATH="assets/tenants/$TenantId/" `
+    --dart-define=HAS_CHANTIER_MODULE=$HasChantierModule
 
 if ($LASTEXITCODE -eq 0) {
     $dateStr = Get-Date -Format "dd_MM_yyyy"

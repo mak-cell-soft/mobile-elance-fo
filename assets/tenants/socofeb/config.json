@@ -13,5 +13,6 @@
   "assetsPath": "assets/tenants/socofeb/",
   "language": "fr",
   "currency": "MAD",
-  "status": "Active"
+  "status": "Active",
+  "hasChantierModule": true
 }

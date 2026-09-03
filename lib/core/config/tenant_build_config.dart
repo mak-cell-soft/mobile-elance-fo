@@ -14,6 +14,7 @@ class TenantBuildConfig {
   static const String environment = String.fromEnvironment('ENVIRONMENT', defaultValue: 'production');
   static const String supportedLocales = String.fromEnvironment('SUPPORTED_LOCALES', defaultValue: 'fr');
   static const String assetsPath = String.fromEnvironment('ASSETS_PATH', defaultValue: 'assets/tenants/socofeb/');
+  static const bool hasChantierModule = bool.fromEnvironment('HAS_CHANTIER_MODULE', defaultValue: true);
 
   /// Returns true if this APK was built specifically for a pre-configured tenant.
   static bool get isEmbedded => tenantId.trim().isNotEmpty;

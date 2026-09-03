@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:get_storage/get_storage.dart';
+import '../config/tenant_build_config.dart';
 
 /// Thin wrapper around GetStorage so the rest of the app never touches
 /// raw string keys directly.
@@ -37,13 +38,18 @@ class StorageService {
   }
 
   /// Checks whether the active tenant has the Chantiers module enabled.
-  /// Inspects `hasChantiers`, `hasChantierModule`, or `modules`/`features` lists in tenantConfig.
-  /// Defaults to true unless explicitly disabled in tenant configuration.
+  /// First checks compile-time build configuration [TenantBuildConfig.hasChantierModule].
+  /// Then inspects `hasChantierModule`, `hasChantiers`, or `modules`/`features` lists in tenantConfig.
+  /// Defaults to true unless explicitly disabled in build configuration or tenant configuration.
   bool get hasChantierModule {
+    // 1. Compile-time check (e.g. flavor or --dart-define=HAS_CHANTIER_MODULE=false)
+    if (!TenantBuildConfig.hasChantierModule) return false;
+
+    // 2. Runtime tenant config check
     final cfg = tenantConfig;
     if (cfg == null) return true;
 
-    if (cfg['hasChantiers'] == false || cfg['hasChantierModule'] == false) {
+    if (cfg['hasChantierModule'] == false || cfg['hasChantiers'] == false) {
       return false;
     }
 
