@@ -44,6 +44,11 @@ android {
             applicationId = "com.socofeb.woodapp"
             resValue("string", "app_name", "socofeb")
         }
+        create("mansour_construction") {
+            dimension = "tenant"
+            applicationId = "com.mansourconstruction.woodapp"
+            resValue("string", "app_name", "Mansour Construction")
+        }
     }
 
     buildTypes {

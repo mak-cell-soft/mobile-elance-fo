@@ -1,0 +1,16 @@
+<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mansour_grad_1" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#1E3A8A"/>
+    </linearGradient>
+    <linearGradient id="mansour_grad_2" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+  <!-- Modern Geometric Architectural 'M' Icon for Mansour Construction -->
+  <rect width="40" height="40" rx="8" fill="url(#mansour_grad_1)"/>
+  <path d="M8 30V12L15 21L20 15L25 21L32 12V30H27V19L22.5 24.5L20 21.5L17.5 24.5L13 19V30H8Z" fill="white"/>
+  <circle cx="20" cy="9" r="2.5" fill="#93C5FD"/>
+</svg>

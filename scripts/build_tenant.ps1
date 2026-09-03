@@ -1,20 +1,47 @@
 # PowerShell script to build custom tenant APKs for WoodApp
-# Usage: .\scripts\build_tenant.ps1 -TenantId socofeb -AppName socofeb -PackageName com.socofeb.woodapp -PrimaryColor "#1B4332"
+# Usage: .\scripts\build_tenant.ps1 -TenantId mansour-construction
+#        .\scripts\build_tenant.ps1 -TenantId socofeb
 
 param (
     [string]$TenantId = "socofeb",
-    [string]$AppName = "socofeb",
-    [string]$PackageName = "com.socofeb.woodapp",
-    [string]$PrimaryColor = "#1B4332",
-    [string]$SecondaryColor = "#2D6A4F",
+    [string]$Flavor = "",
+    [string]$AppName = "",
+    [string]$PackageName = "",
+    [string]$PrimaryColor = "",
+    [string]$SecondaryColor = "",
     [string]$BaseUrl = "https://acya.site/api/",
     [string]$Target = "lib/main_preprod.dart",
     [string]$BuildMode = "apk",
     [bool]$HasChantierModule = $true
 )
 
+# 1. Resolve flavor name (replace hyphens with underscores for Android Gradle compatibility)
+$flavorName = if ($Flavor) { $Flavor } else { $TenantId.Replace('-', '_') }
+
+# 2. Automatically load defaults from tenant config.json if available
+$tenantConfigPath = "assets\tenants\$TenantId\config.json"
+if (Test-Path $tenantConfigPath) {
+    try {
+        $json = Get-Content $tenantConfigPath -Raw | ConvertFrom-Json
+        if (-not $AppName -and $json.appName) { $AppName = $json.appName }
+        if (-not $PackageName -and $json.packageName) { $PackageName = $json.packageName }
+        if (-not $PrimaryColor -and $json.primaryColor) { $PrimaryColor = $json.primaryColor }
+        if (-not $SecondaryColor -and $json.secondaryColor) { $SecondaryColor = $json.secondaryColor }
+        if ($json.hasChantierModule -ne $null) { $HasChantierModule = [bool]$json.hasChantierModule }
+    } catch {
+        Write-Warning "Could not parse tenant config at $tenantConfigPath"
+    }
+}
+
+# 3. Fallback defaults
+if (-not $AppName) { $AppName = $TenantId }
+if (-not $PackageName) { $PackageName = "com.$($TenantId.Replace('-', '')).woodapp" }
+if (-not $PrimaryColor) { $PrimaryColor = "#1B4332" }
+if (-not $SecondaryColor) { $SecondaryColor = "#2D6A4F" }
+
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host "Building Multi-Tenant App: $AppName ($TenantId)" -ForegroundColor Green
+Write-Host "Gradle Flavor: $flavorName" -ForegroundColor Yellow
 Write-Host "Target Entrypoint: $Target" -ForegroundColor Yellow
 Write-Host "Package ID: $PackageName" -ForegroundColor Yellow
 Write-Host "Primary Color: $PrimaryColor" -ForegroundColor Yellow
@@ -23,7 +50,7 @@ Write-Host "==========================================" -ForegroundColor Green
 
 flutter build $BuildMode `
     -t $Target `
-    --flavor=$TenantId `
+    --flavor=$flavorName `
     --dart-define=TENANT_ID=$TenantId `
     --dart-define=APP_NAME=$AppName `
     --dart-define=PACKAGE_NAME=$PackageName `
@@ -35,7 +62,7 @@ flutter build $BuildMode `
 
 if ($LASTEXITCODE -eq 0) {
     $dateStr = Get-Date -Format "dd_MM_yyyy"
-    $sourceApk = "build\app\outputs\flutter-apk\app-$TenantId-release.apk"
+    $sourceApk = "build\app\outputs\flutter-apk\app-$flavorName-release.apk"
     $datedApk = "build\app\outputs\flutter-apk\app-$TenantId-release-$dateStr.apk"
     
     if (Test-Path $sourceApk) {

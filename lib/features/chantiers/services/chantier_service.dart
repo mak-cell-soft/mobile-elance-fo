@@ -145,8 +145,7 @@ class ChantierService {
         else
           'transactionDate': DateTime.now().toIso8601String(),
         'reason': reason.trim(),
-        if (beneficiaryPersonId != null)
-          'beneficiaryPersonId': beneficiaryPersonId,
+        'beneficiaryPersonId': ?beneficiaryPersonId,
         if (reference != null && reference.isNotEmpty)
           'reference': reference.trim(),
         if (notes != null && notes.isNotEmpty) 'notes': notes.trim(),
