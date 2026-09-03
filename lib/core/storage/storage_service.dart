@@ -131,12 +131,31 @@ class StorageService {
   String? get userRole {
     final claims = _jwtPayload;
     if (claims == null) return null;
-    return claims['role'] ??
-        claims['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
+    final val = claims['role'] ??
+        claims['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] ??
+        claims['Role'] ??
+        claims['roles'];
+    if (val is List && val.isNotEmpty) {
+      return val.first.toString();
+    }
+    return val?.toString();
   }
 
   /// Returns true if the user role is Admin or SuperAdmin
   bool get isAdmin {
+    final claims = _jwtPayload;
+    if (claims != null) {
+      final val = claims['role'] ??
+          claims['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] ??
+          claims['Role'] ??
+          claims['roles'];
+      if (val is List) {
+        return val.any((r) {
+          final s = r.toString().trim().toLowerCase();
+          return s == 'admin' || s == 'superadmin' || s == '10' || s == '20';
+        });
+      }
+    }
     final role = userRole;
     if (role == null) return false;
     final r = role.trim().toLowerCase();

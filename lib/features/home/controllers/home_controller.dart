@@ -100,17 +100,21 @@ class HomeController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    // Load treasury caisse data and executive analytics data on initialization
-    loadTreasuryData();
-    loadAdminAnalytics();
+    // Load treasury caisse data and executive analytics data on initialization (Admin only)
+    if (storage.isAdmin) {
+      loadTreasuryData();
+      loadAdminAnalytics();
+    }
   }
 
   /// Unified refresh handler for pull-to-refresh action in HomeView
   Future<void> loadData() async {
-    await Future.wait([
-      loadTreasuryData(),
-      loadAdminAnalytics(),
-    ]);
+    if (storage.isAdmin) {
+      await Future.wait([
+        loadTreasuryData(),
+        loadAdminAnalytics(),
+      ]);
+    }
   }
 
   /// Computed total cash balance across all store site caisses.

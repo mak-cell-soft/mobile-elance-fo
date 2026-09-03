@@ -83,16 +83,19 @@ class HomeView extends GetView<HomeController> {
               // --- 1. HERO WELCOME BANNER ---
               _buildHeroBanner(context, storage, colorScheme),
 
-              const SizedBox(height: 24),
+              // --- 2. TREASURY & ANALYTICS SECTIONS (Admin Only) ---
+              if (storage.isAdmin) ...[
+                const SizedBox(height: 24),
 
-              // --- 2. CAISSE & TREASURY CARDS (Caisse Principale & Caisse par Point de Vente) ---
-              // Visible to all authenticated users regardless of admin status or analytics errors
-              _buildTreasurySection(context, colorScheme),
+                // Caisse & Treasury Cards (Caisse Principale & Caisse par Point de Vente)
+                _buildTreasurySection(context, colorScheme),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              // --- 3. ANALYTICS DASHBOARD ---
-              _buildAnalyticsSection(context, colorScheme),
+                // Executive Analytics Dashboard
+                _buildAnalyticsSection(context, colorScheme),
+              ],
+
               const SizedBox(height: 28),
 
               // --- 3. MODULES & OUTILS SECTION ---
