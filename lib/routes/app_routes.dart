@@ -7,4 +7,6 @@ abstract class AppRoutes {
   static const customers = '/customers';
   static const settings = '/settings';
   static const notifications = '/notifications';
+  static const chantiers = '/chantiers';
+  static const chantierDetail = '/chantiers/detail';
 }
