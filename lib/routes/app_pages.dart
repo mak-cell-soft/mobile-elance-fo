@@ -3,6 +3,9 @@ import '../features/articles/bindings/articles_binding.dart';
 import '../features/articles/views/articles_list_view.dart';
 import '../features/auth/bindings/auth_binding.dart';
 import '../features/auth/views/login_view.dart';
+import '../features/chantiers/bindings/chantiers_binding.dart';
+import '../features/chantiers/views/chantier_detail_view.dart';
+import '../features/chantiers/views/chantiers_list_view.dart';
 import '../features/customers/bindings/customers_binding.dart';
 import '../features/customers/views/customers_list_view.dart';
 import '../features/home/bindings/home_binding.dart';
@@ -43,6 +46,16 @@ abstract class AppPages {
       name: AppRoutes.customers,
       page: () => const CustomersListView(),
       binding: CustomersBinding(),
+    ),
+    GetPage(
+      name: AppRoutes.chantiers,
+      page: () => const ChantiersListView(),
+      binding: ChantiersBinding(),
+    ),
+    GetPage(
+      name: AppRoutes.chantierDetail,
+      page: () => const ChantierDetailView(),
+      binding: ChantiersBinding(),
     ),
     GetPage(
       name: AppRoutes.settings,
