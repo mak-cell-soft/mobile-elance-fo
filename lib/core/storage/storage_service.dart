@@ -36,6 +36,28 @@ class StorageService {
     await _box.remove(_keyTenantConfig);
   }
 
+  /// Checks whether the active tenant has the Chantiers module enabled.
+  /// Inspects `hasChantiers`, `hasChantierModule`, or `modules`/`features` lists in tenantConfig.
+  /// Defaults to true unless explicitly disabled in tenant configuration.
+  bool get hasChantierModule {
+    final cfg = tenantConfig;
+    if (cfg == null) return true;
+
+    if (cfg['hasChantiers'] == false || cfg['hasChantierModule'] == false) {
+      return false;
+    }
+
+    final modules = cfg['modules'] ?? cfg['features'] ?? cfg['enabledModules'];
+    if (modules is List && modules.isNotEmpty) {
+      return modules.any((m) {
+        final s = m.toString().toLowerCase();
+        return s == 'chantier' || s == 'chantiers' || s == 'site' || s == 'sites';
+      });
+    }
+
+    return true;
+  }
+
   // Auth
   String? get token => _box.read<String>(_keyToken);
   String? get fullName => _box.read<String>(_keyFullName);
