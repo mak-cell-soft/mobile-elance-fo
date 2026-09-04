@@ -6,6 +6,7 @@ import '../../../core/storage/storage_service.dart';
 import '../../../core/theme/theme_service.dart';
 import '../../../core/utils/view_status.dart';
 import '../../../routes/app_routes.dart';
+import '../../notifications/controllers/notification_controller.dart';
 import '../../profile/widgets/profile_sheet.dart';
 import '../controllers/home_controller.dart';
 import '../widgets/analytics_filter_bar_widget.dart';
@@ -57,11 +58,26 @@ class HomeView extends GetView<HomeController> {
               onPressed: () => ThemeService.instance.toggleTheme(),
             );
           }),
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined, size: 24),
-            tooltip: 'Notifications',
-            onPressed: () => Get.toNamed(AppRoutes.notifications),
-          ),
+          Obx(() {
+            final notifController = Get.isRegistered<NotificationController>()
+                ? Get.find<NotificationController>()
+                : null;
+            final count = notifController?.unreadCount ?? 0;
+            return Badge(
+              label: Text(
+                '$count',
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+              ),
+              isLabelVisible: count > 0,
+              backgroundColor: const Color(0xFFD97706),
+              offset: const Offset(-4, 4),
+              child: IconButton(
+                icon: const Icon(Icons.notifications_outlined, size: 24),
+                tooltip: 'Notifications',
+                onPressed: () => Get.toNamed(AppRoutes.notifications),
+              ),
+            );
+          }),
           IconButton(
             icon: const Icon(Icons.account_circle_rounded, size: 28),
             tooltip: 'Mon Profil',

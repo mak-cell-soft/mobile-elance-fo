@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:flutter/services.dart';
 import '../../../core/config/tenant_build_config.dart';
 
 /// Tenant Configuration model containing branding, company parameters,
@@ -44,6 +46,35 @@ class TenantConfig {
   });
 
   bool get isActive => status != 'Suspended' && status != 'Expired';
+
+  /// Loads tenant config dynamically:
+  /// 1. Attempts to read manually defined `assets/tenant_config.json`
+  /// 2. If not present or error, attempts `assets/tenants/${TenantBuildConfig.tenantId}/config.json`
+  /// 3. Falls back to compile-time `TenantConfig.fromBuildConfig()`
+  static Future<TenantConfig> loadActiveConfig() async {
+    try {
+      final jsonStr = await rootBundle.loadString('assets/tenant_config.json');
+      if (jsonStr.trim().isNotEmpty) {
+        final decoded = jsonDecode(jsonStr) as Map<String, dynamic>;
+        return TenantConfig.fromJson(decoded);
+      }
+    } catch (_) {
+      // Fall through to tenant-specific or build config
+    }
+
+    try {
+      final path = 'assets/tenants/${TenantBuildConfig.tenantId}/config.json';
+      final jsonStr = await rootBundle.loadString(path);
+      if (jsonStr.trim().isNotEmpty) {
+        final decoded = jsonDecode(jsonStr) as Map<String, dynamic>;
+        return TenantConfig.fromJson(decoded);
+      }
+    } catch (_) {
+      // Fall through to build config
+    }
+
+    return TenantConfig.fromBuildConfig();
+  }
 
   /// Factory constructing [TenantConfig] from compile-time build configuration.
   factory TenantConfig.fromBuildConfig() {

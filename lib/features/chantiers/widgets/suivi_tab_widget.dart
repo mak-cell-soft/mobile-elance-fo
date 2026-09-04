@@ -27,7 +27,7 @@ class SuiviTabWidget extends StatelessWidget {
         ? progressEntries
         : _buildFallbackTimeline(detail);
 
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

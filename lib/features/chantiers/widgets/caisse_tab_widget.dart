@@ -42,7 +42,7 @@ class CaisseTabWidget extends StatelessWidget {
       final filteredList = controller.filteredTransactions;
       final currentFilter = controller.caisseFilter.value;
 
-      return SingleChildScrollView(
+      return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

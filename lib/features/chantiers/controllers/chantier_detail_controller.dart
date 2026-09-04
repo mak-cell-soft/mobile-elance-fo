@@ -49,6 +49,10 @@ class ChantierDetailController extends GetxController {
       chantierId = args;
     } else if (args is Map && args['id'] != null) {
       chantierId = int.tryParse(args['id'].toString()) ?? 0;
+      if (args['tab'] != null) {
+        final tabIndex = int.tryParse(args['tab'].toString()) ?? 0;
+        activeTab.value = tabIndex;
+      }
     } else {
       chantierId = int.tryParse(Get.parameters['id'] ?? '') ?? 0;
     }

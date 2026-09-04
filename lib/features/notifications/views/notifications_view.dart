@@ -303,11 +303,16 @@ class NotificationsView extends GetView<NotificationController> {
   Widget _buildSystemNotificationCard(
       BuildContext context, AppNotification item, ColorScheme colorScheme) {
     final severityColor = _getSeverityColor(item.type, colorScheme);
+    final isCaisse = item.isCaisseRequest;
+    final chantierId = item.chantierIdFromAction;
 
     return Card(
       child: InkWell(
         onTap: () {
           if (!item.isRead) controller.markAsRead(item.id);
+          if (isCaisse && chantierId != null) {
+            controller.navigateToChantierCaisse(chantierId);
+          }
         },
         borderRadius: BorderRadius.circular(16),
         child: Padding(
@@ -318,10 +323,16 @@ class NotificationsView extends GetView<NotificationController> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: severityColor.withValues(alpha: 0.15),
+                  color: isCaisse
+                      ? const Color(0xFFD97706).withValues(alpha: 0.15)
+                      : severityColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(_getSeverityIcon(item.type), color: severityColor, size: 22),
+                child: Icon(
+                  isCaisse ? Icons.account_balance_wallet_rounded : _getSeverityIcon(item.type),
+                  color: isCaisse ? const Color(0xFFD97706) : severityColor,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -357,6 +368,26 @@ class NotificationsView extends GetView<NotificationController> {
                             color: colorScheme.onSurfaceVariant,
                           ),
                     ),
+                    if (isCaisse && chantierId != null) ...[
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            if (!item.isRead) controller.markAsRead(item.id);
+                            controller.navigateToChantierCaisse(chantierId);
+                          },
+                          icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+                          label: const Text('Examiner la caisse', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFD97706),
+                            side: const BorderSide(color: Color(0xFFD97706)),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'core/config/env.dart';
 import 'core/config/tenant_build_config.dart';
 import 'core/network/api_client.dart';
@@ -20,31 +21,47 @@ Future<void> bootstrap(Flavor flavor) async {
   EnvConfig.init(flavor);
   await StorageService.ensureInitialized();
 
-  // Always seed tenant configuration from TenantBuildConfig (defaults to socofeb)
-  final embeddedConfig = TenantConfig.fromBuildConfig();
-  await StorageService.instance.saveTenantSlug(TenantBuildConfig.tenantId);
-  await StorageService.instance.saveTenantConfig(embeddedConfig.toJson());
-  ApiClient.instance.setBaseUrl(TenantBuildConfig.baseUrl);
+  // Initialize French locale date symbols for DateFormat (prevents LocaleDataException)
+  try {
+    await initializeDateFormatting('fr_FR', null);
+  } catch (_) {}
+
+  // Load tenant configuration: checks assets/tenant_config.json,
+  // assets/tenants/{tenantId}/config.json, or compile-time build config
+  final activeConfig = await TenantConfig.loadActiveConfig();
+  await StorageService.instance.saveTenantSlug(activeConfig.tenantId ?? TenantBuildConfig.tenantId);
+  await StorageService.instance.saveTenantConfig(activeConfig.toJson());
+  ApiClient.instance.setBaseUrl(activeConfig.baseUrl ?? TenantBuildConfig.baseUrl);
 
   ThemeService.instance.init();
-  runApp(const WoodApp());
+  runApp(WoodApp(tenantConfig: activeConfig));
 }
 
 class WoodApp extends StatelessWidget {
-  const WoodApp({super.key});
+  final TenantConfig? tenantConfig;
+
+  const WoodApp({super.key, this.tenantConfig});
 
   @override
   Widget build(BuildContext context) {
+    final cfg = tenantConfig ??
+        (StorageService.instance.tenantConfig != null
+            ? TenantConfig.fromJson(StorageService.instance.tenantConfig!)
+            : TenantConfig.fromBuildConfig());
+    final primaryColor = cfg.primaryColor ?? TenantBuildConfig.primaryColor;
+    final secondaryColor = cfg.secondaryColor ?? TenantBuildConfig.secondaryColor;
+    final appTitle = cfg.companyName ?? cfg.appName ?? TenantBuildConfig.companyName;
+
     return GetMaterialApp(
-      title: TenantBuildConfig.appName,
+      title: appTitle,
       debugShowCheckedModeBanner: !EnvConfig.isProduction,
       theme: TenantTheme.buildLight(
-        primaryColorHex: TenantBuildConfig.primaryColor,
-        secondaryColorHex: TenantBuildConfig.secondaryColor,
+        primaryColorHex: primaryColor,
+        secondaryColorHex: secondaryColor,
       ),
       darkTheme: TenantTheme.buildDark(
-        primaryColorHex: TenantBuildConfig.primaryColor,
-        secondaryColorHex: TenantBuildConfig.secondaryColor,
+        primaryColorHex: primaryColor,
+        secondaryColorHex: secondaryColor,
       ),
       themeMode: ThemeService.instance.themeMode,
       initialRoute: AppRoutes.splash,

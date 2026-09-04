@@ -71,6 +71,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/tenant_config.json
     - assets/images/logo.svg
     - assets/tenants/socofeb/
     - assets/tenants/mansour-construction/

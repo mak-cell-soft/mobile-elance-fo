@@ -6,11 +6,10 @@ import 'package:woodapp/main.dart';
 
 void main() {
   testWidgets('App boots to the splash screen', (WidgetTester tester) async {
-    await GetStorage.init();
     EnvConfig.init(Flavor.development);
 
     await tester.pumpWidget(const WoodApp());
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 2000));
 
     expect(find.byType(WoodApp), findsOneWidget);
   });

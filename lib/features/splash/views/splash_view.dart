@@ -50,14 +50,19 @@ class _SplashViewState extends State<SplashView> with SingleTickerProviderStateM
     super.dispose();
   }
 
+  TenantConfig? get _tenantConfig {
+    final json = StorageService.instance.tenantConfig;
+    return json != null ? TenantConfig.fromJson(json) : null;
+  }
+
   void _redirect() async {
     final storage = StorageService.instance;
 
     // Auto-seed tenant config if not already stored
-    if (storage.tenantSlug == null) {
-      final embeddedConfig = TenantConfig.fromBuildConfig();
-      await storage.saveTenantSlug(TenantBuildConfig.tenantId);
-      await storage.saveTenantConfig(embeddedConfig.toJson());
+    if (storage.tenantSlug == null || storage.tenantConfig == null) {
+      final activeConfig = await TenantConfig.loadActiveConfig();
+      await storage.saveTenantSlug(activeConfig.tenantId ?? TenantBuildConfig.tenantId);
+      await storage.saveTenantConfig(activeConfig.toJson());
     }
 
     if (!storage.isLoggedIn) {
@@ -71,6 +76,14 @@ class _SplashViewState extends State<SplashView> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final tenant = _tenantConfig;
+    final displayName = tenant?.companyName ??
+        tenant?.appName ??
+        tenant?.name ??
+        TenantBuildConfig.companyName;
+    final logoAsset = (tenant?.logo != null && tenant!.logo!.isNotEmpty)
+        ? tenant.logo!
+        : TenantBuildConfig.logoPath;
 
     return Scaffold(
       body: Container(
@@ -116,13 +129,13 @@ class _SplashViewState extends State<SplashView> with SingleTickerProviderStateM
                           ),
                         ),
                         child: SvgPicture.asset(
-                          TenantBuildConfig.logoPath,
+                          logoAsset,
                           fit: BoxFit.contain,
                         ),
                       ),
                       const SizedBox(height: 24),
                       Text(
-                        TenantBuildConfig.appName,
+                        displayName,
                         style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: colorScheme.primary,

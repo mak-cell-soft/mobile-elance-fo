@@ -12,13 +12,25 @@ class GeneralTabWidget extends StatelessWidget {
     required this.detail,
   });
 
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'Non définie';
+    try {
+      return DateFormat('dd MMMM yyyy', 'fr_FR').format(date);
+    } catch (_) {
+      try {
+        return DateFormat('dd/MM/yyyy').format(date);
+      } catch (_) {
+        return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final dateFormat = DateFormat('dd MMMM yyyy', 'fr_FR');
 
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -105,18 +117,14 @@ class GeneralTabWidget extends StatelessWidget {
               children: [
                 _buildScheduleRow(
                   label: 'Date de début',
-                  dateStr: detail.startDate != null
-                      ? dateFormat.format(detail.startDate!)
-                      : 'Non définie',
+                  dateStr: _formatDate(detail.startDate),
                   icon: Icons.play_arrow_rounded,
                   iconColor: const Color(0xFF10B981),
                 ),
                 const Divider(height: 20),
                 _buildScheduleRow(
                   label: 'Fin estimée / prévue',
-                  dateStr: detail.plannedEndDate != null
-                      ? dateFormat.format(detail.plannedEndDate!)
-                      : 'Non définie',
+                  dateStr: _formatDate(detail.plannedEndDate),
                   icon: Icons.flag_rounded,
                   iconColor: const Color(0xFF2563EB),
                 ),
@@ -124,7 +132,7 @@ class GeneralTabWidget extends StatelessWidget {
                   const Divider(height: 20),
                   _buildScheduleRow(
                     label: 'Date de fin réelle',
-                    dateStr: dateFormat.format(detail.actualEndDate!),
+                    dateStr: _formatDate(detail.actualEndDate),
                     icon: Icons.check_circle_outline_rounded,
                     iconColor: const Color(0xFF639922),
                   ),

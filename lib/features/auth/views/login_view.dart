@@ -31,7 +31,11 @@ class LoginView extends GetView<AuthController> {
     final displayName = tenant?.companyName ??
         tenant?.appName ??
         tenant?.name ??
-        TenantBuildConfig.appName;
+        TenantBuildConfig.companyName;
+
+    final logoAsset = (tenant?.logo != null && tenant!.logo!.isNotEmpty)
+        ? tenant.logo!
+        : TenantBuildConfig.logoPath;
 
     return Scaffold(
       body: SafeArea(
@@ -67,13 +71,13 @@ class LoginView extends GetView<AuthController> {
                             imageUrl: tenant.logoUrl!,
                             fit: BoxFit.contain,
                             errorWidget: (_, _, _) => SvgPicture.asset(
-                              TenantBuildConfig.logoPath,
+                              logoAsset,
                               fit: BoxFit.contain,
                             ),
                           ),
                         )
                       : SvgPicture.asset(
-                          TenantBuildConfig.logoPath,
+                          logoAsset,
                           fit: BoxFit.contain,
                         ),
                 ),

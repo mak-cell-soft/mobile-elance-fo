@@ -1,0 +1,18 @@
+{
+  "tenantId": "mansour-construction",
+  "companyName": "Mansour Construction",
+  "appName": "Mansour Construction",
+  "packageName": "com.mansourconstruction.woodapp",
+  "name": "Mansour Construction",
+  "logo": "assets/tenants/mansour-construction/logo.svg",
+  "primaryColor": "#1E3A8A",
+  "secondaryColor": "#3B82F6",
+  "baseUrl": "https://acya.site/api/",
+  "environment": "production",
+  "supportedLocales": "fr",
+  "assetsPath": "assets/tenants/mansour-construction/",
+  "language": "fr",
+  "currency": "TND",
+  "status": "Active",
+  "hasChantierModule": true
+}
