@@ -145,6 +145,40 @@ class ChantierDetailController extends GetxController {
 
   int get pendingCount => pendingRequests.length;
 
+  /// The logged-in user ID
+  int? get currentUserId => StorageService.instance.userId;
+
+  /// Cash requests submitted by the logged-in collaborator
+  List<ChantierCaisseTransaction> get myCashRequests {
+    final uid = currentUserId;
+    if (uid == null) {
+      return transactions.where((t) => t.isSortie).toList();
+    }
+    return transactions
+        .where((t) => t.createdById == uid || t.beneficiaryPersonId == uid)
+        .toList();
+  }
+
+  /// Total count of requests submitted by the collaborator
+  int get myRequestsCount => myCashRequests.length;
+
+  /// Pending requests submitted by the collaborator
+  int get myPendingRequestsCount =>
+      myCashRequests.where((t) => t.isPending).length;
+
+  /// Approved / completed requests for the collaborator
+  int get myApprovedRequestsCount =>
+      myCashRequests.where((t) => t.isCompleted).length;
+
+  /// Rejected requests for the collaborator
+  int get myRejectedRequestsCount =>
+      myCashRequests.where((t) => t.isRejected).length;
+
+  /// Total amount approved for the collaborator
+  double get myTotalApprovedAmount => myCashRequests
+      .where((t) => t.isCompleted)
+      .fold(0.0, (sum, t) => sum + t.amount);
+
   // --- Actions ---
 
   /// User Action: Submit cash request (Demande d'argent)
