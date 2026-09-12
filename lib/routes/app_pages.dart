@@ -14,6 +14,8 @@ import '../features/home/bindings/home_binding.dart';
 import '../features/home/views/home_view.dart';
 import '../features/notifications/bindings/notifications_binding.dart';
 import '../features/notifications/views/notifications_view.dart';
+import '../features/purchases/bindings/receipts_binding.dart';
+import '../features/purchases/views/receipts_list_view.dart';
 import '../features/settings/bindings/settings_binding.dart';
 import '../features/settings/views/settings_view.dart';
 import '../features/splash/views/splash_view.dart';
@@ -71,7 +73,24 @@ abstract class AppPages {
       page: () => const NotificationsView(),
       binding: NotificationsBinding(),
     ),
+    GetPage(
+      name: AppRoutes.receipts,
+      page: () => const ReceiptsListView(),
+      binding: ReceiptsBinding(),
+      middlewares: [AdminGuardMiddleware()],
+    ),
   ];
+}
+
+/// Route guard redirecting to Home if the active user is not an Admin or SuperAdmin.
+class AdminGuardMiddleware extends GetMiddleware {
+  @override
+  RouteSettings? redirect(String? route) {
+    if (!StorageService.instance.isAdmin) {
+      return const RouteSettings(name: AppRoutes.home);
+    }
+    return null;
+  }
 }
 
 /// Route guard redirecting to Home if the active tenant does not have the Chantier module.

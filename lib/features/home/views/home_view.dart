@@ -166,8 +166,19 @@ class HomeView extends GetView<HomeController> {
                 );
               }),
 
-              // Module Card: Paramètres Système (Admin Only)
+              // Module Card: Admin Only Features
               if (storage.isAdmin) ...[
+                const SizedBox(height: 12),
+                _buildModuleCard(
+                  context,
+                  title: 'Bons de Réception (BR)',
+                  description: 'Consulter les réceptions fournisseurs, statuts et totaux',
+                  icon: Icons.inventory_2_rounded,
+                  iconColor: const Color(0xFFD97706),
+                  backgroundColor: const Color(0xFFFEF3C7),
+                  onTap: () => Get.toNamed(AppRoutes.receipts),
+                  badgeLabel: 'ADMIN',
+                ),
                 const SizedBox(height: 12),
                 _buildModuleCard(
                   context,
