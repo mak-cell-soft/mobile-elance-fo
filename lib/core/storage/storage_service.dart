@@ -15,9 +15,20 @@ class StorageService {
   static const _keyToken = 'auth_token';
   static const _keyFullName = 'auth_fullname';
   static const _keyEnterpriseName = 'auth_enterprise_name';
+  static const _keyEnterpriseInfo = 'auth_enterprise_info';
   static const _keyThemeMode = 'theme_mode';
 
   static Future<void> ensureInitialized() => GetStorage.init();
+
+  // Helper to parse dynamic values (bool, string "true"/"false", int 1/0) into nullable bool
+  static bool? _toBool(dynamic val) {
+    if (val == null) return null;
+    if (val is bool) return val;
+    final s = val.toString().trim().toLowerCase();
+    if (s == 'true' || s == '1') return true;
+    if (s == 'false' || s == '0') return false;
+    return null;
+  }
 
   // Theme Mode
   String? get themeMode => _box.read<String>(_keyThemeMode);
@@ -37,28 +48,82 @@ class StorageService {
     await _box.remove(_keyTenantConfig);
   }
 
+  // Enterprise Info (cached fresh from GET /Enterprise/getbyid/{id})
+  Map<String, dynamic>? get enterpriseInfo =>
+      _box.read<Map<String, dynamic>>(_keyEnterpriseInfo);
+  Future<void> saveEnterpriseInfo(Map<String, dynamic> info) =>
+      _box.write(_keyEnterpriseInfo, info);
+  Future<void> clearEnterpriseInfo() => _box.remove(_keyEnterpriseInfo);
+
+  /// Returns whether the enterprise manages constructions (tenant-level feature flag for Chantier module).
+  /// Sourced with fallback priority matching fo-acya-app/elance-app.ui useTenantFeatures:
+  /// 1. Fresh enterprise info (GET /Enterprise/getbyid/{id}) stored in local storage
+  /// 2. JWT claim 'IsManagingConstructions' decoded from session token
+  /// 3. Active tenant configuration (assets or backend)
+  /// 4. Compile-time build configuration [TenantBuildConfig.hasChantierModule]
+  bool get isManagingConstructions {
+    // 1. Fresh enterprise cache
+    final ent = enterpriseInfo;
+    if (ent != null) {
+      final val = _toBool(ent['ismanagingconstructions'] ?? ent['isManagingConstructions']);
+      if (val != null) return val;
+    }
+
+    // 2. JWT claim from session
+    final claims = _jwtPayload;
+    if (claims != null) {
+      final val = _toBool(claims['IsManagingConstructions'] ??
+          claims['isManagingConstructions'] ??
+          claims['ismanagingconstructions']);
+      if (val != null) return val;
+    }
+
+    // 3. Tenant config
+    final cfg = tenantConfig;
+    if (cfg != null) {
+      final val = _toBool(cfg['isManagingConstructions'] ??
+          cfg['ismanagingconstructions'] ??
+          cfg['hasChantierModule'] ??
+          cfg['hasChantiers']);
+      if (val != null) return val;
+    }
+
+    // 4. Default fallback
+    return TenantBuildConfig.hasChantierModule;
+  }
+
   /// Checks whether the active tenant has the Chantiers module enabled.
-  /// First checks compile-time build configuration [TenantBuildConfig.hasChantierModule].
-  /// Then inspects `hasChantierModule`, `hasChantiers`, or `modules`/`features` lists in tenantConfig.
-  /// Defaults to true unless explicitly disabled in build configuration or tenant configuration.
+  /// 1. First verifies compile-time build configuration [TenantBuildConfig.hasChantierModule].
+  /// 2. When authenticated, evaluates tenant feature flag [isManagingConstructions].
+  /// 3. Evaluates runtime tenant config (`hasChantierModule`, `hasChantiers`, or `modules` list).
   bool get hasChantierModule {
     // 1. Compile-time check (e.g. flavor or --dart-define=HAS_CHANTIER_MODULE=false)
     if (!TenantBuildConfig.hasChantierModule) return false;
 
-    // 2. Runtime tenant config check
-    final cfg = tenantConfig;
-    if (cfg == null) return true;
-
-    if (cfg['hasChantierModule'] == false || cfg['hasChantiers'] == false) {
+    // 2. If logged in, evaluate tenant feature flag
+    if (isLoggedIn && !isManagingConstructions) {
       return false;
     }
 
-    final modules = cfg['modules'] ?? cfg['features'] ?? cfg['enabledModules'];
-    if (modules is List && modules.isNotEmpty) {
-      return modules.any((m) {
-        final s = m.toString().toLowerCase();
-        return s == 'chantier' || s == 'chantiers' || s == 'site' || s == 'sites';
-      });
+    // 3. Runtime tenant config check
+    final cfg = tenantConfig;
+    if (cfg != null) {
+      final flag = _toBool(cfg['hasChantierModule'] ??
+          cfg['hasChantiers'] ??
+          cfg['isManagingConstructions'] ??
+          cfg['ismanagingconstructions']);
+      if (flag == false) {
+        return false;
+      }
+
+      final modules = cfg['modules'] ?? cfg['features'] ?? cfg['enabledModules'];
+      if (modules is List && modules.isNotEmpty) {
+        final hasModule = modules.any((m) {
+          final s = m.toString().toLowerCase();
+          return s == 'chantier' || s == 'chantiers' || s == 'site' || s == 'sites';
+        });
+        if (!hasModule) return false;
+      }
     }
 
     return true;
@@ -85,6 +150,7 @@ class StorageService {
     await _box.remove(_keyToken);
     await _box.remove(_keyFullName);
     await _box.remove(_keyEnterpriseName);
+    await _box.remove(_keyEnterpriseInfo);
   }
 
   bool get isLoggedIn => token != null && token!.isNotEmpty;
@@ -238,5 +304,69 @@ class StorageService {
       default:
         return role;
     }
+  }
+
+  /// Extracts EnterpriseId from JWT claim
+  int? get enterpriseId {
+    final claims = _jwtPayload;
+    if (claims == null) return null;
+    final val = claims['EnterpriseId'] ??
+        claims['enterpriseId'] ??
+        claims['enterprise_id'];
+    if (val == null) return null;
+    return int.tryParse(val.toString());
+  }
+
+  /// Decodes user permissions map from JWT claim 'Permissions', matching fo-acya-app backend
+  Map<String, dynamic>? get permissions {
+    final claims = _jwtPayload;
+    if (claims == null) return null;
+    final rawPerms = claims['Permissions'] ?? claims['permissions'];
+    if (rawPerms == null) return null;
+    if (rawPerms is Map<String, dynamic>) return rawPerms;
+    if (rawPerms is String && rawPerms.trim().isNotEmpty) {
+      try {
+        return jsonDecode(rawPerms) as Map<String, dynamic>;
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /// Checks whether current user has permission for a specific module & action.
+  /// Matches usePermissionGuard behavior in elance-app.ui.
+  bool hasPermission(String module, {String action = 'canRead'}) {
+    if (isAdmin) return true;
+
+    // Chantiers is primarily governed by tenant subscription/feature flag
+    if (module.toLowerCase() == 'chantier' || module.toLowerCase() == 'chantiers') {
+      return hasChantierModule;
+    }
+
+    final perms = permissions;
+    if (perms == null || perms.isEmpty) {
+      // Fallback: if no explicit permissions configured, allow canRead
+      return action == 'canRead';
+    }
+
+    // Case-insensitive module lookup
+    final moduleKey = perms.keys.firstWhere(
+      (k) => k.toLowerCase() == module.toLowerCase(),
+      orElse: () => '',
+    );
+    if (moduleKey.isEmpty) return false;
+
+    final modulePerms = perms[moduleKey];
+    if (modulePerms is! Map) return false;
+
+    // Case-insensitive action lookup
+    final actionKey = modulePerms.keys.firstWhere(
+      (k) => k.toString().toLowerCase() == action.toLowerCase(),
+      orElse: () => '',
+    );
+    if (actionKey.isEmpty) return false;
+
+    return _toBool(modulePerms[actionKey]) ?? false;
   }
 }

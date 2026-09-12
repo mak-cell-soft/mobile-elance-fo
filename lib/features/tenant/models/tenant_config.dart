@@ -23,6 +23,7 @@ class TenantConfig {
   final String? currency;
   final String? status;
   final bool hasChantierModule;
+  final bool isManagingConstructions;
 
   TenantConfig({
     this.tenantId,
@@ -43,6 +44,7 @@ class TenantConfig {
     this.currency,
     this.status,
     this.hasChantierModule = true,
+    this.isManagingConstructions = true,
   });
 
   bool get isActive => status != 'Suspended' && status != 'Expired';
@@ -94,13 +96,36 @@ class TenantConfig {
       language: TenantBuildConfig.supportedLocales,
       status: 'Active',
       hasChantierModule: TenantBuildConfig.hasChantierModule,
+      isManagingConstructions: TenantBuildConfig.hasChantierModule,
     );
   }
 
   factory TenantConfig.fromJson(Map<String, dynamic> json) {
-    final bool hasChantier = json['hasChantierModule'] as bool? ??
-        json['hasChantiers'] as bool? ??
-        TenantBuildConfig.hasChantierModule;
+    bool parseBoolFlag(dynamic val, {bool defaultValue = true}) {
+      if (val == null) return defaultValue;
+      if (val is bool) return val;
+      final s = val.toString().trim().toLowerCase();
+      if (s == 'true' || s == '1') return true;
+      if (s == 'false' || s == '0') return false;
+      return defaultValue;
+    }
+
+    final dynamic explicitChantierFlag = json['hasChantierModule'] ??
+        json['hasChantiers'] ??
+        json['isManagingConstructions'] ??
+        json['ismanagingconstructions'];
+
+    final bool hasChantier = explicitChantierFlag != null
+        ? parseBoolFlag(explicitChantierFlag, defaultValue: TenantBuildConfig.hasChantierModule)
+        : TenantBuildConfig.hasChantierModule;
+
+    final dynamic explicitManagingConstructions = json['isManagingConstructions'] ??
+        json['ismanagingconstructions'] ??
+        explicitChantierFlag;
+
+    final bool managingConstructions = explicitManagingConstructions != null
+        ? parseBoolFlag(explicitManagingConstructions, defaultValue: hasChantier)
+        : hasChantier;
 
     return TenantConfig(
       tenantId: json['tenantId']?.toString() ?? TenantBuildConfig.tenantId,
@@ -121,6 +146,7 @@ class TenantConfig {
       currency: json['currency']?.toString() ?? 'MAD',
       status: json['status']?.toString() ?? 'Active',
       hasChantierModule: hasChantier,
+      isManagingConstructions: managingConstructions,
     );
   }
 
@@ -144,5 +170,7 @@ class TenantConfig {
         'status': status ?? 'Active',
         'hasChantierModule': hasChantierModule,
         'hasChantiers': hasChantierModule,
+        'isManagingConstructions': isManagingConstructions,
+        'ismanagingconstructions': isManagingConstructions,
       };
 }

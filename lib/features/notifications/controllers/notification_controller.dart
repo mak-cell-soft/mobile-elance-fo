@@ -130,6 +130,7 @@ class NotificationController extends GetxController {
   void _notifyAdminInRealTime(AppNotification item) {
     final isCaisse = item.isCaisseRequest;
     final chantierId = item.chantierIdFromAction;
+    final canAccessChantier = StorageService.instance.hasChantierModule;
 
     Get.snackbar(
       item.title,
@@ -145,7 +146,7 @@ class NotificationController extends GetxController {
       margin: const EdgeInsets.all(16),
       borderRadius: 14,
       duration: const Duration(seconds: 6),
-      mainButton: (isCaisse && chantierId != null)
+      mainButton: (isCaisse && chantierId != null && canAccessChantier)
           ? TextButton(
               onPressed: () {
                 if (Get.isSnackbarOpen) Get.closeCurrentSnackbar();
@@ -170,6 +171,15 @@ class NotificationController extends GetxController {
 
   /// Navigates directly to a chantier's Caisse tab (tab index 2)
   void navigateToChantierCaisse(int chantierId) {
+    if (!StorageService.instance.hasChantierModule) {
+      Get.snackbar(
+        'Accès non disponible',
+        'Le module Chantiers n\'est pas activé pour votre entreprise.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
     Get.toNamed(
       AppRoutes.chantierDetail,
       arguments: {'id': chantierId, 'tab': 2},

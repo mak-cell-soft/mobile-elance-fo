@@ -1,18 +1,18 @@
 {
   "tenantId": "socofeb",
   "companyName": "SOCOFEB",
-  "appName": "socofeb",
+  "appName": "Socofeb",
   "packageName": "com.socofeb.woodapp",
-  "name": "socofeb",
+  "name": "SOCOFEB",
   "logo": "assets/tenants/socofeb/logo.svg",
-  "primaryColor": "#1B4332",
-  "secondaryColor": "#2D6A4F",
+  "primaryColor": "#1E3A8A",
+  "secondaryColor": "#3B82F6",
   "baseUrl": "https://acya.site/api/",
   "environment": "production",
   "supportedLocales": "fr",
   "assetsPath": "assets/tenants/socofeb/",
   "language": "fr",
-  "currency": "MAD",
+  "currency": "TND",
   "status": "Active",
   "hasChantierModule": true
 }

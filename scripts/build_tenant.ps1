@@ -20,6 +20,14 @@ $flavorName = if ($Flavor) { $Flavor } else { $TenantId.Replace('-', '_') }
 
 # 2. Automatically load defaults from tenant config.json if available
 $tenantConfigPath = "assets\tenants\$TenantId\config.json"
+if (Test-Path "assets\tenant_config.json") {
+    try {
+        $rootJson = Get-Content "assets\tenant_config.json" -Raw | ConvertFrom-Json
+        if ($rootJson.tenantId -eq $TenantId) {
+            $tenantConfigPath = "assets\tenant_config.json"
+        }
+    } catch {}
+}
 if (Test-Path $tenantConfigPath) {
     try {
         $json = Get-Content $tenantConfigPath -Raw | ConvertFrom-Json
@@ -28,6 +36,9 @@ if (Test-Path $tenantConfigPath) {
         if (-not $PrimaryColor -and $json.primaryColor) { $PrimaryColor = $json.primaryColor }
         if (-not $SecondaryColor -and $json.secondaryColor) { $SecondaryColor = $json.secondaryColor }
         if ($json.hasChantierModule -ne $null) { $HasChantierModule = [bool]$json.hasChantierModule }
+        if ($json.environment -eq "production" -and $Target -eq "lib/main_preprod.dart") {
+            $Target = "lib/main_production.dart"
+        }
     } catch {
         Write-Warning "Could not parse tenant config at $tenantConfigPath"
     }
@@ -63,11 +74,20 @@ flutter build $BuildMode `
 if ($LASTEXITCODE -eq 0) {
     $dateStr = Get-Date -Format "dd_MM_yyyy"
     $sourceApk = "build\app\outputs\flutter-apk\app-$flavorName-release.apk"
-    $datedApk = "build\app\outputs\flutter-apk\app-$TenantId-release-$dateStr.apk"
-    
+    $datedApkName = "app-$TenantId-release-$dateStr.apk"
+    $buildOutputApk = "build\app\outputs\flutter-apk\$datedApkName"
+    $targetDir = "assets\apks_tenants"
+    $targetApk = Join-Path $targetDir $datedApkName
+
+    if (-not (Test-Path $targetDir)) {
+        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+    }
+
     if (Test-Path $sourceApk) {
-        Copy-Item $sourceApk $datedApk -Force
-        Write-Host "SUCCESS! Created date-stamped release APK: $datedApk" -ForegroundColor Green
+        Copy-Item $sourceApk $buildOutputApk -Force
+        Copy-Item $sourceApk $targetApk -Force
+        Write-Host "SUCCESS! Created date-stamped release APK: $datedApkName" -ForegroundColor Green
+        Write-Host "SUCCESS! Registered APK in: $targetApk" -ForegroundColor Green
     } else {
         Write-Host "SUCCESS! Built APK for $TenantId at build/app/outputs/flutter-apk/" -ForegroundColor Green
     }

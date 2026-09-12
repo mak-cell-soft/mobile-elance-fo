@@ -3,6 +3,7 @@ import '../../../core/network/api_exception.dart';
 import '../../../core/storage/storage_service.dart';
 import '../../../core/utils/view_status.dart';
 import '../../../routes/app_routes.dart';
+import '../../tenant/services/enterprise_service.dart';
 import '../services/auth_service.dart';
 
 class AuthController extends GetxController {
@@ -37,6 +38,19 @@ class AuthController extends GetxController {
         fullName: result.fullname,
         enterpriseName: result.enterpriseName,
       );
+
+      // Fetch fresh enterprise info (feature flags such as ismanagingconstructions)
+      final entId = StorageService.instance.enterpriseId;
+      if (entId != null) {
+        try {
+          final ent = await EnterpriseService().fetchEnterprise(entId);
+          if (ent != null) {
+            await StorageService.instance.saveEnterpriseInfo(ent);
+          }
+        } catch (_) {
+          // Gracefully continue; JWT claims remain the primary fallback
+        }
+      }
 
       status.value = ViewStatus.success;
       return true;

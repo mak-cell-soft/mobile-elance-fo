@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../../core/storage/storage_service.dart';
 import '../../../core/utils/view_status.dart';
 import '../controllers/notification_controller.dart';
 import '../models/app_notification.dart';
@@ -305,12 +306,13 @@ class NotificationsView extends GetView<NotificationController> {
     final severityColor = _getSeverityColor(item.type, colorScheme);
     final isCaisse = item.isCaisseRequest;
     final chantierId = item.chantierIdFromAction;
+    final hasChantierModule = StorageService.instance.hasChantierModule;
 
     return Card(
       child: InkWell(
         onTap: () {
           if (!item.isRead) controller.markAsRead(item.id);
-          if (isCaisse && chantierId != null) {
+          if (isCaisse && chantierId != null && hasChantierModule) {
             controller.navigateToChantierCaisse(chantierId);
           }
         },
@@ -368,7 +370,7 @@ class NotificationsView extends GetView<NotificationController> {
                             color: colorScheme.onSurfaceVariant,
                           ),
                     ),
-                    if (isCaisse && chantierId != null) ...[
+                    if (isCaisse && chantierId != null && hasChantierModule) ...[
                       const SizedBox(height: 10),
                       Align(
                         alignment: Alignment.centerRight,

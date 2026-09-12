@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import '../../../core/storage/storage_service.dart';
 import '../../../core/utils/view_status.dart';
+import '../../tenant/services/enterprise_service.dart';
 import '../models/analytics_dto.dart';
 import '../models/treasury_dto.dart';
 import '../services/analytics_service.dart';
@@ -10,7 +11,11 @@ import '../services/treasury_service.dart';
 class HomeController extends GetxController {
   final AnalyticsService _analyticsService = AnalyticsService();
   final TreasuryService _treasuryService = TreasuryService();
+  final EnterpriseService _enterpriseService = EnterpriseService();
   final StorageService storage = StorageService.instance;
+
+  // Reactive flag indicating whether Chantiers module is enabled for the active tenant
+  late final RxBool hasChantierModule = storage.hasChantierModule.obs;
 
   // View state status for analytics & treasury
   final status = ViewStatus.initial.obs;
@@ -100,6 +105,10 @@ class HomeController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    // Synchronize current state
+    hasChantierModule.value = storage.hasChantierModule;
+    refreshEnterpriseSettings();
+
     // Load treasury caisse data and executive analytics data on initialization (Admin only)
     if (storage.isAdmin) {
       loadTreasuryData();
@@ -107,8 +116,27 @@ class HomeController extends GetxController {
     }
   }
 
+  /// Refreshes enterprise settings and feature flags (isManagingConstructions) from backend API
+  Future<void> refreshEnterpriseSettings() async {
+    final entId = storage.enterpriseId;
+    if (entId != null) {
+      try {
+        final ent = await _enterpriseService.fetchEnterprise(entId);
+        if (ent != null) {
+          await storage.saveEnterpriseInfo(ent);
+          hasChantierModule.value = storage.hasChantierModule;
+        }
+      } catch (_) {
+        // Silently fall back to cached state
+      }
+    }
+  }
+
   /// Unified refresh handler for pull-to-refresh action in HomeView
   Future<void> loadData() async {
+    await refreshEnterpriseSettings();
+    hasChantierModule.value = storage.hasChantierModule;
+
     if (storage.isAdmin) {
       await Future.wait([
         loadTreasuryData(),
