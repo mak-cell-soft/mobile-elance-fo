@@ -14,6 +14,8 @@ import '../widgets/caisse_treasury_cards_widget.dart';
 import '../widgets/kpi_card_widget.dart';
 import '../widgets/receivables_chart_widget.dart';
 import '../widgets/supplier_chart_widget.dart';
+import '../widgets/top_subcategory_chart_widget.dart';
+
 
 /// Executive Home Dashboard View following modern Stitch UI principles.
 /// Features a branded AppBar, welcome banner with user role highlight,
@@ -111,6 +113,10 @@ class HomeView extends GetView<HomeController> {
                 // Executive Analytics Dashboard
                 _buildAnalyticsSection(context, colorScheme),
               ],
+
+              // --- 2.5 TOP VENTES PAR SOUS-CATÉGORIE (All Authenticated Users) ---
+              const SizedBox(height: 24),
+              TopSubCategoryChartWidget(controller: controller),
 
               const SizedBox(height: 28),
 

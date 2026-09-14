@@ -177,4 +177,24 @@ class AnalyticsService {
       return [];
     }
   }
+
+  /// Fetches top selling sub-categories and their top articles for the specified [months] range (default 6).
+  /// Connects to GET /Analytics/top-subcategories?months={months}.
+  /// Accessible by all authenticated users to power the Top Ventes par Sous-Catégorie chart.
+  Future<List<TopSubCategoryDto>> fetchTopSubCategories({int months = 6}) async {
+    try {
+      final response = await _dio.get(
+        'Analytics/top-subcategories',
+        queryParameters: {'months': months},
+      );
+
+      final rawList = response.data as List<dynamic>? ?? [];
+      return rawList
+          .map((item) => TopSubCategoryDto.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw ApiException.fromDioException(e);
+    }
+  }
 }
+

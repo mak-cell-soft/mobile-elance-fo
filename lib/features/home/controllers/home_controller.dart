@@ -31,6 +31,13 @@ class HomeController extends GetxController {
   final caissePrincipaleBalance = 0.0.obs;
   final siteCaisseBalances = <SiteCaisseBalanceDto>[].obs;
 
+  // Top Ventes par Sous-Catégorie state (Accessible by ALL authenticated users)
+  final topSubCategories = <TopSubCategoryDto>[].obs;
+  final topSubCategoriesStatus = ViewStatus.initial.obs;
+  final topSubCategoriesError = RxnString();
+  final selectedTopSalesMonths = 6.obs; // Default 6 months (matching web app)
+  final selectedSalesSubCatId = RxnInt();
+
   // Filters state (matching Next.js elance-app.ui analytics page)
   final selectedYear = DateTime.now().year.obs;
   final selectedMonth = RxnInt(DateTime.now().month); // null = "Tous les mois" (ALL), 1..12
@@ -38,6 +45,7 @@ class HomeController extends GetxController {
 
   /// Month options mapping matching fo-acya-app/elance-app.ui
   static const Map<int?, String> monthOptions = {
+
     null: 'Tous les mois',
     1: 'Janvier',
     2: 'Février',
@@ -98,6 +106,59 @@ class HomeController extends GetxController {
     return 'Achats (TTC)';
   }
 
+  /// Returns the currently active sub-category, or the first one if not set or found.
+  TopSubCategoryDto? get selectedTopSubCategory {
+    if (topSubCategories.isEmpty) return null;
+    if (selectedSalesSubCatId.value != null) {
+      for (final s in topSubCategories) {
+        if (s.subCategoryId == selectedSalesSubCatId.value) return s;
+      }
+    }
+    return topSubCategories.first;
+  }
+
+  /// Updates selected time range for top sub-categories sales (3, 6, 12 months)
+  void updateTopSalesMonths(int months) {
+    if (selectedTopSalesMonths.value != months) {
+      selectedTopSalesMonths.value = months;
+      loadTopSubCategories();
+    }
+  }
+
+  /// Selects a specific sub-category for viewing its top articles donut chart
+  void selectSalesSubCat(int subCatId) {
+    selectedSalesSubCatId.value = subCatId;
+  }
+
+  /// Loads top sales by sub-category from the backend API.
+  /// Accessible by ALL users (not restricted to Admin).
+  Future<void> loadTopSubCategories() async {
+    topSubCategoriesStatus.value = ViewStatus.loading;
+    topSubCategoriesError.value = null;
+
+    try {
+      final results = await _analyticsService.fetchTopSubCategories(
+        months: selectedTopSalesMonths.value,
+      );
+      topSubCategories.assignAll(results);
+
+      // Validate or auto-select active sub-category
+      if (topSubCategories.isNotEmpty) {
+        final exists = topSubCategories.any((s) => s.subCategoryId == selectedSalesSubCatId.value);
+        if (!exists) {
+          selectedSalesSubCatId.value = topSubCategories.first.subCategoryId;
+        }
+      } else {
+        selectedSalesSubCatId.value = null;
+      }
+
+      topSubCategoriesStatus.value = ViewStatus.success;
+    } catch (e) {
+      topSubCategoriesStatus.value = ViewStatus.error;
+      topSubCategoriesError.value = 'Impossible de charger le top des ventes par sous-catégorie';
+    }
+  }
+
   // Separate Treasury view status for independent error/loading handling
   final treasuryStatus = ViewStatus.initial.obs;
   final treasuryErrorMessage = RxnString();
@@ -108,6 +169,9 @@ class HomeController extends GetxController {
     // Synchronize current state
     hasChantierModule.value = storage.hasChantierModule;
     refreshEnterpriseSettings();
+
+    // Top Ventes par Sous-Catégorie is accessible to ALL users
+    loadTopSubCategories();
 
     // Load treasury caisse data and executive analytics data on initialization (Admin only)
     if (storage.isAdmin) {
@@ -137,12 +201,16 @@ class HomeController extends GetxController {
     await refreshEnterpriseSettings();
     hasChantierModule.value = storage.hasChantierModule;
 
+    final futures = <Future<void>>[
+      loadTopSubCategories(),
+    ];
+
     if (storage.isAdmin) {
-      await Future.wait([
-        loadTreasuryData(),
-        loadAdminAnalytics(),
-      ]);
+      futures.add(loadTreasuryData());
+      futures.add(loadAdminAnalytics());
     }
+
+    await Future.wait(futures);
   }
 
   /// Computed total cash balance across all store site caisses.

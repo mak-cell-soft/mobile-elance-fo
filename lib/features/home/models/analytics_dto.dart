@@ -74,3 +74,67 @@ class SupplierChartPointDto {
     required this.payments,
   });
 }
+
+/// Data Transfer Object representing a top sold article within a sub-category.
+class TopArticleDto {
+  final int articleId;
+  final String reference;
+  final String articleName;
+  final double quantitySold;
+  final double revenueTTC;
+
+  const TopArticleDto({
+    required this.articleId,
+    required this.reference,
+    required this.articleName,
+    required this.quantitySold,
+    required this.revenueTTC,
+  });
+
+  factory TopArticleDto.fromJson(Map<String, dynamic> json) {
+    return TopArticleDto(
+      articleId: (json['articleId'] ?? json['ArticleId'] as num?)?.toInt() ?? 0,
+      reference: (json['reference'] ?? json['Reference'] ?? '').toString(),
+      articleName: (json['articleName'] ?? json['ArticleName'] ?? '').toString(),
+      quantitySold: (json['quantitySold'] ?? json['QuantitySold'] as num?)?.toDouble() ?? 0.0,
+      revenueTTC: (json['revenueTTC'] ?? json['RevenueTTC'] ?? json['revenueTtc'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
+/// Data Transfer Object representing a sub-category with sales metrics and its top sold articles.
+class TopSubCategoryDto {
+  final int subCategoryId;
+  final String subCategoryName;
+  final String categoryName;
+  final double totalQuantitySold;
+  final double totalRevenueTTC;
+  final int articleCount;
+  final List<TopArticleDto> topArticles;
+
+  const TopSubCategoryDto({
+    required this.subCategoryId,
+    required this.subCategoryName,
+    required this.categoryName,
+    required this.totalQuantitySold,
+    required this.totalRevenueTTC,
+    required this.articleCount,
+    required this.topArticles,
+  });
+
+  factory TopSubCategoryDto.fromJson(Map<String, dynamic> json) {
+    final rawArticles = (json['topArticles'] ?? json['TopArticles']) as List<dynamic>? ?? [];
+    return TopSubCategoryDto(
+      subCategoryId: (json['subCategoryId'] ?? json['SubCategoryId'] as num?)?.toInt() ?? 0,
+      subCategoryName: (json['subCategoryName'] ?? json['SubCategoryName'] ?? '').toString(),
+      categoryName: (json['categoryName'] ?? json['CategoryName'] ?? '').toString(),
+      totalQuantitySold: (json['totalQuantitySold'] ?? json['TotalQuantitySold'] as num?)?.toDouble() ?? 0.0,
+      totalRevenueTTC: (json['totalRevenueTTC'] ?? json['TotalRevenueTTC'] ?? json['totalRevenueTtc'] as num?)?.toDouble() ?? 0.0,
+      articleCount: (json['articleCount'] ?? json['ArticleCount'] as num?)?.toInt() ?? 0,
+      topArticles: rawArticles
+          .map((item) => TopArticleDto.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
