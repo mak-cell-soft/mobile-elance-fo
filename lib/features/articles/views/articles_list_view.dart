@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../core/utils/view_status.dart';
+import '../../../routes/app_routes.dart';
 import '../controllers/articles_controller.dart';
 import '../widgets/article_card.dart';
 import '../widgets/article_filter_sheet.dart';
@@ -181,6 +182,13 @@ class ArticlesListView extends GetView<ArticlesController> {
                             onToggleExpand: articleId != null
                                 ? () => controller.toggleExpandArticle(articleId)
                                 : null,
+                            onTap: () => Get.toNamed(
+                              AppRoutes.articleDetail,
+                              arguments: {
+                                'article': article,
+                                'stockSummary': stockSummary,
+                              },
+                            ),
                           );
                         });
                       },

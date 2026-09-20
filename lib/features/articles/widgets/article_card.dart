@@ -9,6 +9,7 @@ class ArticleCard extends StatelessWidget {
   final StockSummary? stockSummary;
   final bool isExpanded;
   final VoidCallback? onToggleExpand;
+  final VoidCallback? onTap;
 
   const ArticleCard({
     super.key,
@@ -16,6 +17,7 @@ class ArticleCard extends StatelessWidget {
     this.stockSummary,
     this.isExpanded = false,
     this.onToggleExpand,
+    this.onTap,
   });
 
   static const Color _emeraldColor = Color(0xFF10B981);
@@ -34,7 +36,7 @@ class ArticleCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       child: InkWell(
-        onTap: onToggleExpand,
+        onTap: onTap ?? onToggleExpand,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(14),
@@ -162,28 +164,35 @@ class ArticleCard extends StatelessWidget {
                         ),
                       ),
 
-                      // Expand Chevron with Label
+                      // Expand Chevron with Label (allows toggling inline depot preview specifically)
                       const SizedBox(height: 6),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            isExpanded ? 'Fermer' : 'Dépôts',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.primary,
-                            ),
+                      InkWell(
+                        onTap: onToggleExpand,
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                isExpanded ? 'Fermer' : 'Dépôts',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: colorScheme.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              Icon(
+                                isExpanded
+                                    ? Icons.keyboard_arrow_up_rounded
+                                    : Icons.keyboard_arrow_down_rounded,
+                                size: 18,
+                                color: colorScheme.primary,
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 2),
-                          Icon(
-                            isExpanded
-                                ? Icons.keyboard_arrow_up_rounded
-                                : Icons.keyboard_arrow_down_rounded,
-                            size: 18,
-                            color: colorScheme.primary,
-                          ),
-                        ],
+                        ),
                       ),
                     ],
                   ),

@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import '../core/storage/storage_service.dart';
 import '../features/articles/bindings/articles_binding.dart';
+import '../features/articles/views/article_detail_view.dart';
 import '../features/articles/views/articles_list_view.dart';
 import '../features/auth/bindings/auth_binding.dart';
 import '../features/auth/views/login_view.dart';
@@ -45,6 +46,10 @@ abstract class AppPages {
       name: AppRoutes.articles,
       page: () => const ArticlesListView(),
       binding: ArticlesBinding(),
+    ),
+    GetPage(
+      name: AppRoutes.articleDetail,
+      page: () => const ArticleDetailView(),
     ),
     GetPage(
       name: AppRoutes.customers,
