@@ -1,10 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:get/get.dart';
 import 'package:woodapp/core/config/env.dart';
 import 'package:woodapp/main.dart';
 
 void main() {
   testWidgets('App boots to the splash screen', (WidgetTester tester) async {
+    Get.testMode = true;
     EnvConfig.init(Flavor.development);
 
     await tester.pumpWidget(const WoodApp());

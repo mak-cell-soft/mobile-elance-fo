@@ -3,91 +3,109 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import '../../../core/config/tenant_build_config.dart';
+import '../../../core/network/api_client.dart';
 import '../../../core/storage/storage_service.dart';
 import '../../../core/utils/view_status.dart';
 import '../../../routes/app_routes.dart';
 import '../../tenant/models/tenant_config.dart';
 import '../controllers/auth_controller.dart';
 
-/// Modern Login screen built with Stitch UI standards.
-/// Displays active tenant branding or pre-configured company parameters.
+/// Modern Login screen displaying dynamic tenant branding with Elance fallback.
+/// Reference implementation: fo-acya-app/elance-app.ui/src/app/login/page.tsx
 class LoginView extends GetView<AuthController> {
   LoginView({super.key});
 
   final RxBool _obscurePassword = true.obs;
 
-  TenantConfig? get _tenantConfig {
+  /// Exact existing Elance logo asset path in WOODAPP, mirroring Elance web app.
+  static const String elanceLogoAsset = 'assets/images/logo.svg';
+
+  TenantConfig get _fallbackTenantConfig {
+    if (Get.testMode) return TenantConfig.fromBuildConfig();
     final json = StorageService.instance.tenantConfig;
-    return json != null ? TenantConfig.fromJson(json) : null;
+    if (json != null) return TenantConfig.fromJson(json);
+    return TenantConfig.fromBuildConfig();
   }
 
   @override
   Widget build(BuildContext context) {
     final loginController = TextEditingController();
     final passwordController = TextEditingController();
-    final tenant = _tenantConfig;
     final colorScheme = Theme.of(context).colorScheme;
-
-    final displayName = tenant?.companyName ??
-        tenant?.appName ??
-        tenant?.name ??
-        TenantBuildConfig.companyName;
-
-    final logoAsset = (tenant?.logo != null && tenant!.logo!.isNotEmpty)
-        ? tenant.logo!
-        : TenantBuildConfig.logoPath;
 
     return Scaffold(
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Branded Logo Header
-                Container(
-                  width: 84,
-                  height: 84,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surface,
-                    borderRadius: BorderRadius.circular(22),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colorScheme.primary.withValues(alpha: 0.12),
-                        blurRadius: 24,
-                        offset: const Offset(0, 6),
+            child: Obx(() {
+              // Reactive tenant config loaded & refreshed by AuthController
+              final tenant = controller.tenantConfig.value ?? _fallbackTenantConfig;
+              final isTenantInactive = tenant.status == 'Suspended' || tenant.status == 'Expired';
+
+              final displayName = tenant.companyName ??
+                  tenant.name ??
+                  tenant.appName ??
+                  (TenantBuildConfig.isEmbedded ? TenantBuildConfig.companyName : 'Élancé');
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // ── Branded Logo Header ─────────────────────────────────────
+                  Container(
+                    height: 84,
+                    constraints: const BoxConstraints(minWidth: 84, maxWidth: 140),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surface,
+                      borderRadius: BorderRadius.circular(22),
+                      boxShadow: [
+                        BoxShadow(
+                          color: colorScheme.primary.withValues(alpha: 0.12),
+                          blurRadius: 24,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                      border: Border.all(
+                        color: colorScheme.primary.withValues(alpha: 0.1),
                       ),
-                    ],
-                    border: Border.all(
-                      color: colorScheme.primary.withValues(alpha: 0.1),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: buildLogo(tenant, colorScheme),
                     ),
                   ),
-                  child: (tenant?.logoUrl != null && tenant!.logoUrl!.isNotEmpty)
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: CachedNetworkImage(
-                            imageUrl: tenant.logoUrl!,
-                            fit: BoxFit.contain,
-                            errorWidget: (_, _, _) => SvgPicture.asset(
-                              logoAsset,
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        )
-                      : SvgPicture.asset(
-                          logoAsset,
-                          fit: BoxFit.contain,
+                  const SizedBox(height: 20),
+                  Text(
+                    displayName,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+
+                  // ── Inactive Tenant Warning (mirrors Elance login/page.tsx) ──
+                  if (isTenantInactive) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Text(
+                        "Votre entreprise est désactivée. Contactez l'administrateur.",
+                        style: TextStyle(
+                          color: Colors.red.shade800,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
                         ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  displayName,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
 
                 // Credentials Form Card
                 Card(
@@ -185,10 +203,11 @@ class LoginView extends GetView<AuthController> {
                 // Login Submit Button
                 Obx(() {
                   final isLoading = controller.status.value == ViewStatus.loading;
+                  final isDisabled = isLoading || isTenantInactive;
                   return SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: isLoading
+                      onPressed: isDisabled
                           ? null
                           : () => _submit(
                                 loginController.text,
@@ -208,11 +227,90 @@ class LoginView extends GetView<AuthController> {
                   );
                 }),
               ],
-            ),
-          ),
+            );
+          }),
+        ),
+      ),
+    ),
+  );
+}
+
+  /// Builds the tenant logo according to the exact fallback priority:
+  /// Current tenant -> Tenant logo available? -> YES: Display tenant logo
+  ///                                           -> NO / ERROR: Display exact Elance logo
+  @visibleForTesting
+  Widget buildLogo(TenantConfig tenant, ColorScheme colorScheme) {
+    // 1. Dynamic remote logo URL (e.g. from /api/enterprise/config)
+    final rawLogoUrl = tenant.logoUrl?.trim();
+    if (rawLogoUrl != null && rawLogoUrl.isNotEmpty) {
+      final resolvedUrl = _resolveUrl(rawLogoUrl, tenant.baseUrl);
+      final isSvg = resolvedUrl.toLowerCase().split('?').first.endsWith('.svg');
+
+      if (isSvg) {
+        return SvgPicture.network(
+          resolvedUrl,
+          fit: BoxFit.contain,
+          placeholderBuilder: (_) => _buildPlaceholder(colorScheme),
+          errorBuilder: (_, _, _) => _buildElanceLogo(),
+        );
+      } else {
+        return CachedNetworkImage(
+          imageUrl: resolvedUrl,
+          fit: BoxFit.contain,
+          placeholder: (_, _) => _buildPlaceholder(colorScheme),
+          errorWidget: (_, _, _) => _buildElanceLogo(),
+        );
+      }
+    }
+
+    // 2. Pre-configured local tenant asset (e.g. assets/tenants/mansour-construction/logo.svg)
+    final customAsset = tenant.logo?.trim();
+    if (customAsset != null &&
+        customAsset.isNotEmpty &&
+        customAsset != elanceLogoAsset) {
+      return SvgPicture.asset(
+        customAsset,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => _buildElanceLogo(),
+      );
+    }
+
+    // 3. Fallback: Exact existing Elance logo asset
+    return _buildElanceLogo();
+  }
+
+  /// Renders the exact existing Elance logo asset (assets/images/logo.svg).
+  /// Preserves exact 1:1 isometric aspect ratio and gradient styling without distortion.
+  Widget _buildElanceLogo() {
+    return SvgPicture.asset(
+      elanceLogoAsset,
+      fit: BoxFit.contain,
+    );
+  }
+
+  /// Lightweight loading spinner indicator while a remote logo is fetching.
+  Widget _buildPlaceholder(ColorScheme colorScheme) {
+    return Center(
+      child: SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: colorScheme.primary,
         ),
       ),
     );
+  }
+
+  /// Resolves relative logo URLs against the tenant API base URL.
+  String _resolveUrl(String url, String? tenantBaseUrl) {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    final base = (tenantBaseUrl != null && tenantBaseUrl.trim().isNotEmpty)
+        ? tenantBaseUrl
+        : ApiClient.instance.dio.options.baseUrl;
+    return Uri.parse(base).resolve(url).toString();
   }
 
   Future<void> _submit(String login, String password) async {
