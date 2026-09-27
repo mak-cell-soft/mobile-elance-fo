@@ -68,7 +68,7 @@ jobs:
             exit 1
           fi
 
-      - name: Notify ACYA API: Status = Building
+      - name: "Notify ACYA API: Status = Building"
         run: |
           BUILD_ID="${{ inputs.buildId }}"
           API_URL="${{ steps.env-setup.outputs.api_base_url }}admin/mobile/builds/${BUILD_ID}/status"
@@ -361,7 +361,7 @@ jobs:
           ARTIFACT_PATH=$(python3 -c "import json; res=json.load(open('$RESPONSE_FILE')); print(res.get('artifactPath', ''))")
           echo "artifact_path=$ARTIFACT_PATH" >> $GITHUB_OUTPUT
 
-      - name: Notify ACYA API: Status = Succeeded
+      - name: "Notify ACYA API: Status = Succeeded"
         if: success()
         run: |
           BUILD_ID="${{ inputs.buildId }}"
@@ -409,7 +409,7 @@ jobs:
         env:
           ACYA_CI_TOKEN: ${{ secrets.ACYA_CI_TOKEN }}
 
-      - name: Notify ACYA API: Status = Failed
+      - name: "Notify ACYA API: Status = Failed"
         if: failure()
         run: |
           BUILD_ID="${{ inputs.buildId }}"
