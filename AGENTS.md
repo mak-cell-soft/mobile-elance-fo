@@ -213,9 +213,9 @@ flutter run -t lib/main_development.dart
 
 ---
 
-## 12. Future Automated Build System Compatibility
+## 12. Automated Build System Pipeline (Implemented)
 
-ACYA is designing an automated APK generation pipeline:
+ACYA employs an automated APK generation pipeline (.github/workflows/mobile-build.yml):
 
 ```text
 admin.acya.site

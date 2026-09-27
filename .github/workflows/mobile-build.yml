@@ -1,0 +1,456 @@
+name: Build Mobile Tenant APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      buildId:
+        description: 'ACYA MobileBuild Record ID'
+        required: true
+        type: string
+      apiEnvironment:
+        description: 'ACYA API Environment (production, staging, development)'
+        required: false
+        default: 'production'
+        type: string
+      apiBaseUrl:
+        description: 'Override ACYA API Base URL (optional)'
+        required: false
+        default: ''
+        type: string
+
+# Least privilege: workflow only reads contents, never writes or commits back to repository
+permissions:
+  contents: read
+
+# Isolate each build run
+concurrency:
+  group: mobile-build-${{ inputs.buildId }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build & Package Tenant APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout mobile-elance-fo repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: 'stable'
+          cache: true
+
+      - name: Resolve API Base URL and CI Credentials
+        id: env-setup
+        run: |
+          RAW_URL="${{ inputs.apiBaseUrl }}"
+          if [ -z "$RAW_URL" ]; then
+            RAW_URL="${{ secrets.ACYA_API_BASE_URL }}"
+          fi
+          if [ -z "$RAW_URL" ]; then
+            RAW_URL="https://acya.site/api/"
+          fi
+          # Ensure trailing slash
+          [[ "$RAW_URL" != */ ]] && RAW_URL="${RAW_URL}/"
+          echo "api_base_url=$RAW_URL" >> $GITHUB_OUTPUT
+
+          if [ -z "${{ secrets.ACYA_CI_TOKEN }}" ]; then
+            echo "::error::Secret ACYA_CI_TOKEN is not set in repository secrets."
+            exit 1
+          fi
+
+      - name: Notify ACYA API: Status = Building
+        run: |
+          BUILD_ID="${{ inputs.buildId }}"
+          API_URL="${{ steps.env-setup.outputs.api_base_url }}admin/mobile/builds/${BUILD_ID}/status"
+          echo "Updating build ${BUILD_ID} status to Building..."
+
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$API_URL" \
+            -H "X-CI-Token: ${{ secrets.ACYA_CI_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.ACYA_CI_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"status":"Building"}')
+
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "::warning::Failed to update build status to Building (HTTP $HTTP_STATUS). Continuing build..."
+          fi
+
+      - name: Fetch Dynamic Tenant Configuration & Build Metadata
+        id: fetch-config
+        run: |
+          BUILD_ID="${{ inputs.buildId }}"
+          CONFIG_URL="${{ steps.env-setup.outputs.api_base_url }}admin/mobile/builds/${BUILD_ID}/config"
+          BUILD_URL="${{ steps.env-setup.outputs.api_base_url }}admin/mobile/builds/${BUILD_ID}"
+
+          echo "Fetching dynamic configuration for build ${BUILD_ID}..."
+          CONFIG_FILE="$RUNNER_TEMP/tenant_config.json"
+          BUILD_FILE="$RUNNER_TEMP/build_metadata.json"
+
+          HTTP_STATUS_CONFIG=$(curl -s -w "%{http_code}" -o "$CONFIG_FILE" -X GET "$CONFIG_URL" \
+            -H "X-CI-Token: ${{ secrets.ACYA_CI_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.ACYA_CI_TOKEN }}")
+
+          if [ "$HTTP_STATUS_CONFIG" -ne 200 ]; then
+            echo "::error::Failed to fetch tenant configuration (HTTP $HTTP_STATUS_CONFIG)"
+            cat "$CONFIG_FILE"
+            exit 1
+          fi
+
+          HTTP_STATUS_BUILD=$(curl -s -w "%{http_code}" -o "$BUILD_FILE" -X GET "$BUILD_URL" \
+            -H "X-CI-Token: ${{ secrets.ACYA_CI_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.ACYA_CI_TOKEN }}")
+
+          if [ "$HTTP_STATUS_BUILD" -ne 200 ]; then
+            echo "::error::Failed to fetch build metadata (HTTP $HTTP_STATUS_BUILD)"
+            cat "$BUILD_FILE"
+            exit 1
+          fi
+
+      - name: Validate Tenant Configuration Data
+        id: validate-config
+        run: |
+          python3 - << 'EOF'
+          import json, re, sys, os
+
+          config_path = os.path.expandvars('$RUNNER_TEMP/tenant_config.json')
+          build_path = os.path.expandvars('$RUNNER_TEMP/build_metadata.json')
+
+          with open(config_path, 'r', encoding='utf-8') as f:
+              config = json.load(f)
+
+          with open(build_path, 'r', encoding='utf-8') as f:
+              build = json.load(f)
+
+          tenant_id = config.get('tenantId', '').strip()
+          app_name = config.get('appName', '').strip()
+          package_name = config.get('packageName', '').strip()
+          primary_color = config.get('primaryColor', '').strip()
+          secondary_color = config.get('secondaryColor', '').strip()
+          base_url = config.get('baseUrl', '').strip()
+          has_chantier = str(config.get('hasChantierModule', True)).lower()
+
+          version = build.get('version', '').strip()
+          build_number = str(build.get('buildNumber', 1))
+
+          # 1. Validate tenantId (alphanumeric, underscores, hyphens only)
+          if not re.match(r'^[a-zA-Z0-9_-]{2,64}$', tenant_id):
+              print(f"::error::Invalid tenantId '{tenant_id}'. Must be alphanumeric with optional '-' or '_' (2-64 chars).")
+              sys.exit(1)
+
+          # 2. Validate packageName (Android applicationId pattern)
+          if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$', package_name):
+              print(f"::error::Invalid Android packageName '{package_name}'.")
+              sys.exit(1)
+
+          # 3. Validate hex colors
+          color_regex = r'^#[0-9a-fA-F]{6}$'
+          if not re.match(color_regex, primary_color):
+              print(f"::warning::Invalid primaryColor '{primary_color}', using fallback #1E3A8A")
+              primary_color = "#1E3A8A"
+
+          if not re.match(color_regex, secondary_color):
+              print(f"::warning::Invalid secondaryColor '{secondary_color}', using fallback #3B82F6")
+              secondary_color = "#3B82F6"
+
+          # 4. Validate baseUrl
+          if not (base_url.startswith('http://') or base_url.startswith('https://')):
+              print(f"::error::Invalid baseUrl '{base_url}'. Must begin with http:// or https://")
+              sys.exit(1)
+
+          # 5. Validate version and buildNumber
+          if not version:
+              version = "1.0.0"
+          if not build_number.isdigit() or int(build_number) <= 0:
+              build_number = "1"
+
+          # Flavor name (Gradle cannot have hyphens)
+          flavor_name = tenant_id.replace('-', '_')
+          # Safe name for file
+          app_name_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', app_name)
+          if not app_name_safe:
+              app_name_safe = tenant_id
+
+          github_output = os.environ['GITHUB_OUTPUT']
+          with open(github_output, 'a', encoding='utf-8') as out:
+              out.write(f"tenant_id={tenant_id}\n")
+              out.write(f"app_name={app_name}\n")
+              out.write(f"app_name_safe={app_name_safe}\n")
+              out.write(f"package_name={package_name}\n")
+              out.write(f"primary_color={primary_color}\n")
+              out.write(f"secondary_color={secondary_color}\n")
+              out.write(f"base_url={base_url}\n")
+              out.write(f"has_chantier={has_chantier}\n")
+              out.write(f"flavor_name={flavor_name}\n")
+              out.write(f"version={version}\n")
+              out.write(f"build_number={build_number}\n")
+
+          print("Tenant configuration successfully validated.")
+          EOF
+
+      - name: Inject Tenant Runtime Configuration and Assets
+        run: |
+          TENANT_ID="${{ steps.validate-config.outputs.tenant_id }}"
+
+          # 1. Write runtime active config
+          cp "$RUNNER_TEMP/tenant_config.json" assets/tenant_config.json
+
+          # 2. Ensure tenant asset directory exists
+          TENANT_DIR="assets/tenants/${TENANT_ID}"
+          mkdir -p "$TENANT_DIR"
+          cp "$RUNNER_TEMP/tenant_config.json" "$TENANT_DIR/config.json"
+
+          # If tenant logo does not exist, provide fallback from generic logo
+          if [ ! -f "$TENANT_DIR/logo.svg" ]; then
+            echo "Tenant logo.svg not found in ${TENANT_DIR}, copying fallback asset..."
+            cp assets/images/logo.svg "$TENANT_DIR/logo.svg"
+          fi
+
+      - name: Configure and Validate Android Release Signing
+        id: signing-setup
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS_SECRET: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "Validating required production Android release signing secrets..."
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is missing. Production builds cannot use debug signing."
+            exit 1
+          fi
+          if [ -z "$KEYSTORE_PASS" ]; then
+            echo "::error::ANDROID_KEYSTORE_PASSWORD secret is missing. Production builds cannot use debug signing."
+            exit 1
+          fi
+          if [ -z "$KEY_ALIAS_SECRET" ]; then
+            echo "::error::ANDROID_KEY_ALIAS secret is missing. Production builds cannot use debug signing."
+            exit 1
+          fi
+          if [ -z "$KEY_PASS" ]; then
+            echo "::error::ANDROID_KEY_PASSWORD secret is missing. Production builds cannot use debug signing."
+            exit 1
+          fi
+
+          KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_FILE" 2>/dev/null || {
+            echo "::error::Failed to decode ANDROID_KEYSTORE_BASE64 secret. Ensure the secret is a valid base64-encoded keystore."
+            exit 1
+          }
+
+          if [ ! -s "$KEYSTORE_FILE" ]; then
+            echo "::error::Decoded keystore file is empty or does not exist at $KEYSTORE_FILE."
+            exit 1
+          fi
+
+          echo "Verifying keystore integrity and alias accessibility via keytool..."
+          if ! keytool -list -keystore "$KEYSTORE_FILE" -storepass "$KEYSTORE_PASS" -alias "$KEY_ALIAS_SECRET" > /dev/null 2>&1; then
+            echo "::error::Keystore validation failed with the provided alias/password. Check that the keystore, store password, and alias are valid."
+            exit 1
+          fi
+
+          echo "Keystore successfully validated."
+          echo "KEYSTORE_PATH=$KEYSTORE_FILE" >> $GITHUB_ENV
+          echo "KEYSTORE_PASSWORD=$KEYSTORE_PASS" >> $GITHUB_ENV
+          echo "KEY_ALIAS=$KEY_ALIAS_SECRET" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=$KEY_PASS" >> $GITHUB_ENV
+
+      - name: Restore Flutter Dependencies
+        run: flutter pub get
+
+      - name: Run Test Suite
+        run: flutter test
+
+      - name: Build Signed Release APK
+        env:
+          FLAVOR_NAME: ${{ steps.validate-config.outputs.flavor_name }}
+          PACKAGE_NAME: ${{ steps.validate-config.outputs.package_name }}
+          APP_NAME: ${{ steps.validate-config.outputs.app_name }}
+        run: |
+          TENANT_ID="${{ steps.validate-config.outputs.tenant_id }}"
+          PRIMARY_COLOR="${{ steps.validate-config.outputs.primary_color }}"
+          SECONDARY_COLOR="${{ steps.validate-config.outputs.secondary_color }}"
+          BASE_URL="${{ steps.validate-config.outputs.base_url }}"
+          HAS_CHANTIER="${{ steps.validate-config.outputs.has_chantier }}"
+          VERSION="${{ steps.validate-config.outputs.version }}"
+          BUILD_NUMBER="${{ steps.validate-config.outputs.build_number }}"
+
+          echo "Building APK for tenant $TENANT_ID (Flavor: $FLAVOR_NAME, Package: $PACKAGE_NAME, Version: $VERSION+$BUILD_NUMBER)..."
+
+          flutter build apk --release \
+            --flavor="$FLAVOR_NAME" \
+            --build-name="$VERSION" \
+            --build-number="$BUILD_NUMBER" \
+            --dart-define=TENANT_ID="$TENANT_ID" \
+            --dart-define=APP_NAME="$APP_NAME" \
+            --dart-define=PACKAGE_NAME="$PACKAGE_NAME" \
+            --dart-define=PRIMARY_COLOR="$PRIMARY_COLOR" \
+            --dart-define=SECONDARY_COLOR="$SECONDARY_COLOR" \
+            --dart-define=BASE_URL="$BASE_URL" \
+            --dart-define=ASSETS_PATH="assets/tenants/$TENANT_ID/" \
+            --dart-define=HAS_CHANTIER_MODULE="$HAS_CHANTIER"
+
+      - name: Package Artifact & Compute Checksum
+        id: artifact-prep
+        run: |
+          FLAVOR_NAME="${{ steps.validate-config.outputs.flavor_name }}"
+          APP_NAME_SAFE="${{ steps.validate-config.outputs.app_name_safe }}"
+          VERSION="${{ steps.validate-config.outputs.version }}"
+          BUILD_NUMBER="${{ steps.validate-config.outputs.build_number }}"
+
+          SOURCE_APK="build/app/outputs/flutter-apk/app-${FLAVOR_NAME}-release.apk"
+          if [ ! -f "$SOURCE_APK" ]; then
+            # Check standard fallback output if flavor prefix differs
+            SOURCE_APK=$(find build/app/outputs/flutter-apk/ -type f -name "*release*.apk" | head -n 1)
+          fi
+
+          if [ ! -f "$SOURCE_APK" ]; then
+            echo "::error::Could not find generated APK in build/app/outputs/flutter-apk/"
+            ls -la build/app/outputs/flutter-apk/ || true
+            exit 1
+          fi
+
+          FINAL_FILE_NAME="${APP_NAME_SAFE}-${VERSION}-${BUILD_NUMBER}.apk"
+          STAGED_APK="$RUNNER_TEMP/${FINAL_FILE_NAME}"
+          cp "$SOURCE_APK" "$STAGED_APK"
+
+          # Calculate exact SHA-256 and byte size
+          SHA256=$(sha256sum "$STAGED_APK" | awk '{print $1}')
+          FILE_SIZE=$(wc -c < "$STAGED_APK" | tr -d ' ')
+
+          echo "Generated APK: $FINAL_FILE_NAME ($FILE_SIZE bytes)"
+          echo "SHA-256: $SHA256"
+
+          echo "apk_path=$STAGED_APK" >> $GITHUB_OUTPUT
+          echo "apk_filename=$FINAL_FILE_NAME" >> $GITHUB_OUTPUT
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "file_size=$FILE_SIZE" >> $GITHUB_OUTPUT
+
+      - name: Upload APK to ACYA Private Storage
+        id: upload-artifact
+        run: |
+          BUILD_ID="${{ inputs.buildId }}"
+          UPLOAD_URL="${{ steps.env-setup.outputs.api_base_url }}admin/mobile/builds/${BUILD_ID}/artifact"
+          APK_PATH="${{ steps.artifact-prep.outputs.apk_path }}"
+          SHA256="${{ steps.artifact-prep.outputs.sha256 }}"
+
+          echo "Uploading $APK_PATH to ACYA private storage..."
+
+          RESPONSE_FILE="$RUNNER_TEMP/upload_response.json"
+          HTTP_STATUS=$(curl -s -w "%{http_code}" -o "$RESPONSE_FILE" -X POST "$UPLOAD_URL" \
+            -H "X-CI-Token: ${{ secrets.ACYA_CI_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.ACYA_CI_TOKEN }}" \
+            -H "X-Artifact-Sha256: $SHA256" \
+            -F "file=@$APK_PATH")
+
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "::error::Artifact upload failed with HTTP status $HTTP_STATUS"
+            cat "$RESPONSE_FILE"
+            exit 1
+          fi
+
+          cat "$RESPONSE_FILE"
+          ARTIFACT_PATH=$(python3 -c "import json; res=json.load(open('$RESPONSE_FILE')); print(res.get('artifactPath', ''))")
+          echo "artifact_path=$ARTIFACT_PATH" >> $GITHUB_OUTPUT
+
+      - name: Notify ACYA API: Status = Succeeded
+        if: success()
+        run: |
+          BUILD_ID="${{ inputs.buildId }}"
+          STATUS_URL="${{ steps.env-setup.outputs.api_base_url }}admin/mobile/builds/${BUILD_ID}/status"
+          ARTIFACT_PATH="${{ steps.upload-artifact.outputs.artifact_path }}"
+          FILE_SIZE="${{ steps.artifact-prep.outputs.file_size }}"
+          SHA256="${{ steps.artifact-prep.outputs.sha256 }}"
+
+          python3 - << EOF
+          import json, os, urllib.request, datetime
+
+          status_url = "$STATUS_URL"
+          ci_token = os.environ['ACYA_CI_TOKEN']
+
+          payload = {
+              "status": "Succeeded",
+              "artifactPath": "$ARTIFACT_PATH",
+              "artifactSize": int("$FILE_SIZE"),
+              "sha256": "$SHA256",
+              "gitCommitHash": "${{ github.sha }}",
+              "gitBranch": "${{ github.ref_name }}",
+              "workflowRunId": "${{ github.run_id }}",
+              "completedAt": datetime.datetime.now(datetime.timezone.utc).isoformat()
+          }
+
+          data = json.dumps(payload).encode('utf-8')
+          req = urllib.request.Request(
+              status_url,
+              data=data,
+              headers={
+                  "Content-Type": "application/json",
+                  "X-CI-Token": ci_token,
+                  "Authorization": f"Bearer {ci_token}"
+              },
+              method='PATCH'
+          )
+
+          try:
+              with urllib.request.urlopen(req) as response:
+                  print(f"Status update Succeeded completed with HTTP {response.status}")
+          except Exception as e:
+              print(f"Failed to update status to Succeeded: {e}")
+              raise e
+          EOF
+        env:
+          ACYA_CI_TOKEN: ${{ secrets.ACYA_CI_TOKEN }}
+
+      - name: Notify ACYA API: Status = Failed
+        if: failure()
+        run: |
+          BUILD_ID="${{ inputs.buildId }}"
+          STATUS_URL="${{ steps.env-setup.outputs.api_base_url }}admin/mobile/builds/${BUILD_ID}/status"
+
+          python3 - << EOF
+          import json, os, urllib.request, datetime
+
+          status_url = "$STATUS_URL"
+          ci_token = os.environ.get('ACYA_CI_TOKEN', '')
+
+          payload = {
+              "status": "Failed",
+              "errorMessage": "GitHub Actions workflow run #${{ github.run_id }} encountered an error during build or upload.",
+              "workflowRunId": "${{ github.run_id }}",
+              "completedAt": datetime.datetime.now(datetime.timezone.utc).isoformat()
+          }
+
+          data = json.dumps(payload).encode('utf-8')
+          req = urllib.request.Request(
+              status_url,
+              data=data,
+              headers={
+                  "Content-Type": "application/json",
+                  "X-CI-Token": ci_token,
+                  "Authorization": f"Bearer {ci_token}"
+              },
+              method='PATCH'
+          )
+
+          try:
+              with urllib.request.urlopen(req) as response:
+                  print(f"Status update Failed completed with HTTP {response.status}")
+          except Exception as e:
+              print(f"Failed to update status to Failed: {e}")
+          EOF
+        env:
+          ACYA_CI_TOKEN: ${{ secrets.ACYA_CI_TOKEN }}
+
+      - name: Cleanup Secrets & Sensitive Artifacts
+        if: always()
+        run: |
+          echo "Cleaning up temporary runner files..."
+          rm -f "$RUNNER_TEMP/release.jks" "$RUNNER_TEMP"/*.json "$RUNNER_TEMP"/*.apk || true

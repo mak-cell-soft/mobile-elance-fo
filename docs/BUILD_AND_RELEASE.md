@@ -128,33 +128,49 @@ buildTypes {
 
 ---
 
-## 6. Planned Automated CI/CD Architecture
+## 6. Automated CI/CD Architecture (Implemented)
 
-ACYA will deploy an automated build orchestration flow:
+The repository includes the automated tenant build workflow in .github/workflows/mobile-build.yml.
 
 ```text
 1. Admin Portal (admin.acya.site)
-      │ Tenant administrator requests new mobile APK build
+      │ POST /api/admin/mobile/builds
       ▼
-2. ACYA Backend API (POST /mobile/build-trigger)
-      │ Dispatches repository dispatch event to GitHub
+2. ACYA Backend API
+      │ Dispatches GitHub Actions workflow via REST API (workflow_dispatch)
       ▼
-3. GitHub Actions Workflow (.github/workflows/build-tenant-apk.yml)
-      │ - Checks out repository
+3. GitHub Actions Workflow (.github/workflows/mobile-build.yml)
+      │ - Authenticates with ACYA API via X-CI-Token
+      │ - Sets status to Building: PATCH /api/admin/mobile/builds/{id}/status
+      │ - Fetches dynamic tenant config: GET /api/admin/mobile/builds/{id}/config
+      │ - Validates configuration (tenantId, packageName, baseUrl, colors)
+      │ - Generates assets/tenant_config.json & stages tenant assets
       │ - Sets up Flutter 3.44.x & Java 17
-      │ - Injects tenant config JSON & assets
-      │ - Injects Android signing keystore from GitHub Secrets
-      │ - Runs: flutter build apk --flavor={tenant} --dart-define=...
+      │ - Injects Android release keystore from ANDROID_KEYSTORE_BASE64
+      │ - Runs test suite: flutter test
+      │ - Builds signed APK: flutter build apk --release --flavor={flavor} --dart-define=...
+      │ - Computes exact SHA-256 and byte size
+      │ - Uploads APK to private storage: POST /api/admin/mobile/builds/{id}/artifact
+      │ - Updates build status to Succeeded: PATCH /api/admin/mobile/builds/{id}/status
       ▼
-4. Signed Release APK Produced
-      │ Uploads artifact to distribution storage
+4. ACYA Private Artifact Storage (/storage/private/mobile/{tenantId}/{build}/)
+      │ Secure storage outside public web roots
       ▼
-5. ACYA Download Portal (downloads.acya.site/mobile/{tenantId}/)
-      │ Generates download link and QR code for tenant users
+5. ACYA Download Portal (Planned: downloads.acya.site/mobile/{tenantId}/)
+      │ Download with short-lived HMAC-SHA256 signed token
       ▼
 6. Tenant Client Device Installs APK
 ```
 
+### Required GitHub Secrets:
+* ACYA_CI_TOKEN: Least-privilege CI token for authenticating runner callbacks to ACYA API.
+* ACYA_API_BASE_URL (optional): Base URL for ACYA API (defaults to https://acya.site/api/).
+* ANDROID_KEYSTORE_BASE64 (optional for production): Base64-encoded Android release keystore (.jks / .keystore).
+* ANDROID_KEYSTORE_PASSWORD: Password for the Android release keystore.
+* ANDROID_KEY_ALIAS: Alias of the release signing key.
+* ANDROID_KEY_PASSWORD: Password of the release signing key.
+
 ### Architectural Guardrails for Agents
 * Never add code that requires manual editing of Dart files to support a new tenant.
-* Always ensure tenant configuration can be passed via JSON file or `--dart-define`.
+* Always ensure tenant configuration can be passed via JSON file or --dart-define.
+* Never commit secrets, passwords, or keystores into the repository.
