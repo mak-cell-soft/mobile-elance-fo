@@ -146,25 +146,42 @@ jobs:
               print(f"::error::Invalid tenantId '{tenant_id}'. Must be alphanumeric with optional '-' or '_' (2-64 chars).")
               sys.exit(1)
 
+          # Flavor name (match build_tenant.ps1: replace hyphens with underscores)
+          flavor = config.get('flavor', '').strip()
+          if not flavor:
+              flavor = tenant_id.replace('-', '_')
+          flavor_name = flavor.replace('-', '_')
+
+          # Fallbacks matching build_tenant.ps1
+          if not app_name:
+              app_name = tenant_id
+
+          if not package_name:
+              package_name = f"com.{tenant_id.replace('-', '')}.woodapp"
+
           # 2. Validate packageName (Android applicationId pattern)
           if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$', package_name):
               print(f"::error::Invalid Android packageName '{package_name}'.")
               sys.exit(1)
 
-          # 3. Validate hex colors
+          # 3. Validate hex colors (fallbacks: #1B4332 / #2D6A4F matching build_tenant.ps1)
           color_regex = r'^#[0-9a-fA-F]{6}$'
-          if not re.match(color_regex, primary_color):
-              print(f"::warning::Invalid primaryColor '{primary_color}', using fallback #1E3A8A")
-              primary_color = "#1E3A8A"
+          if not primary_color or not re.match(color_regex, primary_color):
+              print(f"::warning::Invalid primaryColor '{primary_color}', using fallback #1B4332")
+              primary_color = "#1B4332"
 
-          if not re.match(color_regex, secondary_color):
-              print(f"::warning::Invalid secondaryColor '{secondary_color}', using fallback #3B82F6")
-              secondary_color = "#3B82F6"
+          if not secondary_color or not re.match(color_regex, secondary_color):
+              print(f"::warning::Invalid secondaryColor '{secondary_color}', using fallback #2D6A4F")
+              secondary_color = "#2D6A4F"
 
           # 4. Validate baseUrl
+          if not base_url:
+              base_url = "https://acya.site/api/"
           if not (base_url.startswith('http://') or base_url.startswith('https://')):
               print(f"::error::Invalid baseUrl '{base_url}'. Must begin with http:// or https://")
               sys.exit(1)
+          if not base_url.endswith('/'):
+              base_url += '/'
 
           # 5. Validate version and buildNumber
           if not version:
@@ -172,8 +189,6 @@ jobs:
           if not build_number.isdigit() or int(build_number) <= 0:
               build_number = "1"
 
-          # Flavor name (Gradle cannot have hyphens)
-          flavor_name = tenant_id.replace('-', '_')
           # Safe name for file
           app_name_safe = re.sub(r'[^a-zA-Z0-9_-]', '_', app_name)
           if not app_name_safe:
@@ -240,6 +255,11 @@ jobs:
             exit 1
           fi
 
+          # Mask secret values in case any command or error could print them
+          echo "::add-mask::$KEYSTORE_PASS"
+          echo "::add-mask::$KEY_PASS"
+          echo "::add-mask::$KEY_ALIAS_SECRET"
+
           KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
           echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_FILE" 2>/dev/null || {
             echo "::error::Failed to decode ANDROID_KEYSTORE_BASE64 secret. Ensure the secret is a valid base64-encoded keystore."
@@ -256,6 +276,10 @@ jobs:
             echo "::error::Keystore validation failed with the provided alias/password. Check that the keystore, store password, and alias are valid."
             exit 1
           fi
+
+          # Extract certificate SHA-256 fingerprint for APK signature verification later
+          EXPECTED_CERT_SHA256=$(keytool -exportcert -keystore "$KEYSTORE_FILE" -alias "$KEY_ALIAS_SECRET" -storepass "$KEYSTORE_PASS" 2>/dev/null | sha256sum | awk '{print $1}')
+          echo "expected_cert_sha256=$EXPECTED_CERT_SHA256" >> $GITHUB_OUTPUT
 
           echo "Keystore successfully validated."
           echo "KEYSTORE_PATH=$KEYSTORE_FILE" >> $GITHUB_ENV
@@ -283,9 +307,12 @@ jobs:
           VERSION="${{ steps.validate-config.outputs.version }}"
           BUILD_NUMBER="${{ steps.validate-config.outputs.build_number }}"
 
-          echo "Building APK for tenant $TENANT_ID (Flavor: $FLAVOR_NAME, Package: $PACKAGE_NAME, Version: $VERSION+$BUILD_NUMBER)..."
+          echo "Building production release APK for tenant $TENANT_ID..."
+          echo "Flavor: $FLAVOR_NAME | Package: $PACKAGE_NAME | Version: $VERSION+$BUILD_NUMBER"
+          echo "Target entrypoint: lib/main_production.dart"
 
           flutter build apk --release \
+            -t lib/main_production.dart \
             --flavor="$FLAVOR_NAME" \
             --build-name="$VERSION" \
             --build-number="$BUILD_NUMBER" \
@@ -303,19 +330,93 @@ jobs:
         run: |
           FLAVOR_NAME="${{ steps.validate-config.outputs.flavor_name }}"
           APP_NAME_SAFE="${{ steps.validate-config.outputs.app_name_safe }}"
+          PACKAGE_NAME="${{ steps.validate-config.outputs.package_name }}"
           VERSION="${{ steps.validate-config.outputs.version }}"
           BUILD_NUMBER="${{ steps.validate-config.outputs.build_number }}"
+          EXPECTED_CERT_SHA256="${{ steps.signing-setup.outputs.expected_cert_sha256 }}"
 
-          SOURCE_APK="build/app/outputs/flutter-apk/app-${FLAVOR_NAME}-release.apk"
-          if [ ! -f "$SOURCE_APK" ]; then
-            # Check standard fallback output if flavor prefix differs
-            SOURCE_APK=$(find build/app/outputs/flutter-apk/ -type f -name "*release*.apk" | head -n 1)
+          # STEP 8: APK Discovery using resolved tenant flavor
+          EXPECTED_APK="build/app/outputs/flutter-apk/app-${FLAVOR_NAME}-release.apk"
+          if [ -f "$EXPECTED_APK" ]; then
+            SOURCE_APK="$EXPECTED_APK"
+          else
+            # Check dynamic fallback matching flavor release APK
+            SOURCE_APK=$(find build/app/outputs/flutter-apk/ -maxdepth 1 -type f -name "*${FLAVOR_NAME}*release*.apk" 2>/dev/null | head -n 1)
           fi
 
-          if [ ! -f "$SOURCE_APK" ]; then
-            echo "::error::Could not find generated APK in build/app/outputs/flutter-apk/"
+          if [ -z "$SOURCE_APK" ] || [ ! -f "$SOURCE_APK" ]; then
+            echo "::error::Expected release APK not found for flavor '${FLAVOR_NAME}' at $EXPECTED_APK"
             ls -la build/app/outputs/flutter-apk/ || true
             exit 1
+          fi
+
+          echo "Found generated APK at: $SOURCE_APK"
+
+          # STEP 9: APK Validation
+          # 1. Verify file exists and file size > 0
+          if [ ! -s "$SOURCE_APK" ]; then
+            echo "::error::Generated APK file is empty or does not exist: $SOURCE_APK"
+            exit 1
+          fi
+
+          # Locate Android SDK build-tools (aapt, apksigner)
+          AAPT=$(which aapt 2>/dev/null || find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -name aapt -type f 2>/dev/null | sort -V | tail -n 1)
+          APKSIGNER=$(which apksigner 2>/dev/null || find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -name apksigner -type f 2>/dev/null | sort -V | tail -n 1)
+
+          if [ -n "$AAPT" ] && [ -x "$AAPT" ]; then
+            echo "Validating APK package identity and release flag using aapt..."
+            BADGING_OUTPUT=$("$AAPT" dump badging "$SOURCE_APK")
+
+            # 2. Verify APK is a release APK (must not be debuggable)
+            if echo "$BADGING_OUTPUT" | grep -q "application-debuggable"; then
+              echo "::error::APK validation failed: APK contains 'application-debuggable' flag. Production builds cannot be debuggable."
+              exit 1
+            fi
+            echo "✓ Verified: APK is not debuggable (release build confirmed)."
+
+            # 3. Verify package identity corresponds to requested tenant
+            ACTUAL_PACKAGE=$(echo "$BADGING_OUTPUT" | grep -o "package: name='[^']*'" | head -n 1 | cut -d"'" -f2)
+            if [ -n "$ACTUAL_PACKAGE" ] && [ "$ACTUAL_PACKAGE" != "$PACKAGE_NAME" ]; then
+              echo "::error::APK package mismatch: expected '$PACKAGE_NAME', found '$ACTUAL_PACKAGE'"
+              exit 1
+            fi
+            echo "✓ Verified: APK package name matches requested tenant package ($PACKAGE_NAME)."
+          else
+            echo "::warning::aapt tool not found in runner PATH. Inspecting archive structure..."
+            unzip -l "$SOURCE_APK" AndroidManifest.xml classes.dex > /dev/null 2>&1 || {
+              echo "::error::APK is corrupt: missing AndroidManifest.xml or classes.dex"
+              exit 1
+            }
+          fi
+
+          # 4. Verify artifact is signed with the configured production release key
+          if [ -n "$APKSIGNER" ] && [ -x "$APKSIGNER" ]; then
+            echo "Verifying APK signature integrity using apksigner..."
+            if ! "$APKSIGNER" verify "$SOURCE_APK" > /dev/null 2>&1; then
+              echo "::error::APK signature verification failed. APK is unsigned or has an invalid signature."
+              exit 1
+            fi
+            echo "✓ Verified: APK signature is cryptographically valid."
+
+            # Verify signer certificate matches the configured production keystore certificate
+            if [ -n "$EXPECTED_CERT_SHA256" ]; then
+              APK_SIGNER_CERTS=$("$APKSIGNER" verify --print-certs "$SOURCE_APK" 2>/dev/null || true)
+              APK_CERT_SHA256=$(echo "$APK_SIGNER_CERTS" | grep -i "certificate SHA-256 digest" | head -n 1 | sed 's/.*: *//' | tr -d ' :' | tr '[:upper:]' '[:lower:]')
+              NORMALIZED_EXPECTED=$(echo "$EXPECTED_CERT_SHA256" | tr -d ' :' | tr '[:upper:]' '[:lower:]')
+
+              if [ -n "$APK_CERT_SHA256" ] && [ "$APK_CERT_SHA256" != "$NORMALIZED_EXPECTED" ]; then
+                echo "::error::APK signature certificate does not match the configured production keystore certificate."
+                exit 1
+              fi
+              echo "✓ Verified: APK is signed with the configured production release key."
+            fi
+          else
+            echo "::warning::apksigner tool not found. Verifying signature block presence in APK..."
+            if ! unzip -l "$SOURCE_APK" "META-INF/*" | grep -qE '\.(RSA|DSA|EC)$'; then
+              echo "::error::APK is missing signature block files in META-INF."
+              exit 1
+            fi
+            echo "✓ Verified: Signature files found in APK archive."
           fi
 
           FINAL_FILE_NAME="${APP_NAME_SAFE}-${VERSION}-${BUILD_NUMBER}.apk"
@@ -413,7 +514,15 @@ jobs:
         if: failure()
         run: |
           BUILD_ID="${{ inputs.buildId }}"
-          STATUS_URL="${{ steps.env-setup.outputs.api_base_url }}admin/mobile/builds/${BUILD_ID}/status"
+          RAW_URL="${{ steps.env-setup.outputs.api_base_url }}"
+          if [ -z "$RAW_URL" ]; then
+            RAW_URL="${{ inputs.apiBaseUrl }}"
+          fi
+          if [ -z "$RAW_URL" ]; then
+            RAW_URL="https://acya.site/api/"
+          fi
+          [[ "$RAW_URL" != */ ]] && RAW_URL="${RAW_URL}/"
+          STATUS_URL="${RAW_URL}admin/mobile/builds/${BUILD_ID}/status"
 
           python3 - << EOF
           import json, os, urllib.request, datetime
