@@ -4,17 +4,54 @@
 class TenantBuildConfig {
   TenantBuildConfig._();
 
-  static const String tenantId = String.fromEnvironment('TENANT_ID', defaultValue: 'socofeb');
-  static const String companyName = String.fromEnvironment('COMPANY_NAME', defaultValue: 'SOCOFEB');
-  static const String appName = String.fromEnvironment('APP_NAME', defaultValue: 'socofeb');
-  static const String packageName = String.fromEnvironment('PACKAGE_NAME', defaultValue: 'com.socofeb.woodapp');
-  static const String primaryColor = String.fromEnvironment('PRIMARY_COLOR', defaultValue: '#1B4332');
-  static const String secondaryColor = String.fromEnvironment('SECONDARY_COLOR', defaultValue: '#2D6A4F');
-  static const String baseUrl = String.fromEnvironment('BASE_URL', defaultValue: 'https://acya.site/api/');
-  static const String environment = String.fromEnvironment('ENVIRONMENT', defaultValue: 'production');
-  static const String supportedLocales = String.fromEnvironment('SUPPORTED_LOCALES', defaultValue: 'fr');
-  static const String assetsPath = String.fromEnvironment('ASSETS_PATH', defaultValue: 'assets/tenants/socofeb/');
-  static const bool hasChantierModule = bool.fromEnvironment('HAS_CHANTIER_MODULE', defaultValue: true);
+  static const String tenantId = String.fromEnvironment(
+    'TENANT_ID',
+    defaultValue: 'socofeb',
+  );
+  static const String companyName = String.fromEnvironment(
+    'COMPANY_NAME',
+    defaultValue: 'SOCOFEB',
+  );
+  static const String appName = String.fromEnvironment(
+    'APP_NAME',
+    defaultValue: 'socofeb',
+  );
+  static const String packageName = String.fromEnvironment(
+    'PACKAGE_NAME',
+    defaultValue: 'com.acya.woodapp',
+  );
+  static const String primaryColor = String.fromEnvironment(
+    'PRIMARY_COLOR',
+    defaultValue: '#1B4332',
+  );
+  static const String secondaryColor = String.fromEnvironment(
+    'SECONDARY_COLOR',
+    defaultValue: '#2D6A4F',
+  );
+  static const String baseUrl = String.fromEnvironment(
+    'BASE_URL',
+    defaultValue: 'https://acya.site/api/',
+  );
+  static const String environment = String.fromEnvironment(
+    'ENVIRONMENT',
+    defaultValue: 'production',
+  );
+  static const String supportedLocales = String.fromEnvironment(
+    'SUPPORTED_LOCALES',
+    defaultValue: 'fr',
+  );
+  static const String assetsPath = String.fromEnvironment(
+    'ASSETS_PATH',
+    defaultValue: 'assets/tenants/socofeb/',
+  );
+  static const bool hasChantierModule = bool.fromEnvironment(
+    'HAS_CHANTIER_MODULE',
+    defaultValue: true,
+  );
+  static const bool hasProductionModule = bool.fromEnvironment(
+    'HAS_PRODUCTION_MODULE',
+    defaultValue: true,
+  );
 
   /// Returns true if this APK was built specifically for a pre-configured tenant.
   static bool get isEmbedded => tenantId.trim().isNotEmpty;

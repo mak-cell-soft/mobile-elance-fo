@@ -11,4 +11,6 @@ abstract class AppRoutes {
   static const chantiers = '/chantiers';
   static const chantierDetail = '/chantiers/detail';
   static const receipts = '/receipts';
+  static const production = '/production';
+  static const productionDetail = '/production/detail';
 }

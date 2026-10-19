@@ -17,6 +17,9 @@ class HomeController extends GetxController {
   // Reactive flag indicating whether Chantiers module is enabled for the active tenant
   late final RxBool hasChantierModule = storage.hasChantierModule.obs;
 
+  // Reactive flag indicating whether Production module is enabled for the active tenant
+  late final RxBool hasProductionModule = storage.hasProductionModule.obs;
+
   // View state status for analytics & treasury
   final status = ViewStatus.initial.obs;
   final errorMessage = RxnString();
@@ -40,12 +43,13 @@ class HomeController extends GetxController {
 
   // Filters state (matching Next.js elance-app.ui analytics page)
   final selectedYear = DateTime.now().year.obs;
-  final selectedMonth = RxnInt(DateTime.now().month); // null = "Tous les mois" (ALL), 1..12
+  final selectedMonth = RxnInt(
+    DateTime.now().month,
+  ); // null = "Tous les mois" (ALL), 1..12
   final receivablesSearchQuery = ''.obs;
 
   /// Month options mapping matching fo-acya-app/elance-app.ui
   static const Map<int?, String> monthOptions = {
-
     null: 'Tous les mois',
     1: 'Janvier',
     2: 'Février',
@@ -84,19 +88,25 @@ class HomeController extends GetxController {
   }
 
   /// Dynamic title for sales KPI card
-  String get salesKpiTitle => selectedMonth.value == null ? 'CA Année' : 'CA Mois';
+  String get salesKpiTitle =>
+      selectedMonth.value == null ? 'CA Année' : 'CA Mois';
 
   /// Dynamic period badge for sales KPI card
   String get salesPeriodLabel {
     if (selectedMonth.value == null) {
       return 'Année ${selectedYear.value}';
     }
-    final isCurrentMonth = selectedMonth.value == DateTime.now().month && selectedYear.value == DateTime.now().year;
-    return isCurrentMonth ? 'Ce mois' : monthOptions[selectedMonth.value] ?? 'Ce mois';
+    final isCurrentMonth =
+        selectedMonth.value == DateTime.now().month &&
+        selectedYear.value == DateTime.now().year;
+    return isCurrentMonth
+        ? 'Ce mois'
+        : monthOptions[selectedMonth.value] ?? 'Ce mois';
   }
 
   /// Dynamic title for purchases KPI card
-  String get purchasesKpiTitle => selectedMonth.value == null ? 'CA Année Achat' : 'CA Mois Achat';
+  String get purchasesKpiTitle =>
+      selectedMonth.value == null ? 'CA Année Achat' : 'CA Mois Achat';
 
   /// Dynamic period badge for purchases KPI card
   String get purchasesPeriodLabel {
@@ -144,7 +154,9 @@ class HomeController extends GetxController {
 
       // Validate or auto-select active sub-category
       if (topSubCategories.isNotEmpty) {
-        final exists = topSubCategories.any((s) => s.subCategoryId == selectedSalesSubCatId.value);
+        final exists = topSubCategories.any(
+          (s) => s.subCategoryId == selectedSalesSubCatId.value,
+        );
         if (!exists) {
           selectedSalesSubCatId.value = topSubCategories.first.subCategoryId;
         }
@@ -155,7 +167,8 @@ class HomeController extends GetxController {
       topSubCategoriesStatus.value = ViewStatus.success;
     } catch (e) {
       topSubCategoriesStatus.value = ViewStatus.error;
-      topSubCategoriesError.value = 'Impossible de charger le top des ventes par sous-catégorie';
+      topSubCategoriesError.value =
+          'Impossible de charger le top des ventes par sous-catégorie';
     }
   }
 
@@ -168,6 +181,7 @@ class HomeController extends GetxController {
     super.onInit();
     // Synchronize current state
     hasChantierModule.value = storage.hasChantierModule;
+    hasProductionModule.value = storage.hasProductionModule;
     refreshEnterpriseSettings();
 
     // Top Ventes par Sous-Catégorie is accessible to ALL users
@@ -189,6 +203,7 @@ class HomeController extends GetxController {
         if (ent != null) {
           await storage.saveEnterpriseInfo(ent);
           hasChantierModule.value = storage.hasChantierModule;
+          hasProductionModule.value = storage.hasProductionModule;
         }
       } catch (_) {
         // Silently fall back to cached state
@@ -200,10 +215,9 @@ class HomeController extends GetxController {
   Future<void> loadData() async {
     await refreshEnterpriseSettings();
     hasChantierModule.value = storage.hasChantierModule;
+    hasProductionModule.value = storage.hasProductionModule;
 
-    final futures = <Future<void>>[
-      loadTopSubCategories(),
-    ];
+    final futures = <Future<void>>[loadTopSubCategories()];
 
     if (storage.isAdmin) {
       futures.add(loadTreasuryData());
@@ -215,7 +229,10 @@ class HomeController extends GetxController {
 
   /// Computed total cash balance across all store site caisses.
   double get totalSitesCaisseBalance {
-    return siteCaisseBalances.fold(0.0, (sum, site) => sum + site.currentBalance);
+    return siteCaisseBalances.fold(
+      0.0,
+      (sum, site) => sum + site.currentBalance,
+    );
   }
 
   /// Loads Caisse Principale & Caisse par Point de Vente balances independently from the backend API.
@@ -237,7 +254,8 @@ class HomeController extends GetxController {
     } catch (e) {
       // NOTE: Fallback gracefully to zero balance on error so app stays responsive
       treasuryStatus.value = ViewStatus.error;
-      treasuryErrorMessage.value = 'Impossible de charger la trésorerie caisses';
+      treasuryErrorMessage.value =
+          'Impossible de charger la trésorerie caisses';
     }
   }
 
@@ -274,7 +292,8 @@ class HomeController extends GetxController {
       status.value = ViewStatus.success;
     } catch (e) {
       status.value = ViewStatus.error;
-      errorMessage.value = 'Impossible de charger les données analytiques (Admin)';
+      errorMessage.value =
+          'Impossible de charger les données analytiques (Admin)';
     }
   }
 
@@ -282,6 +301,8 @@ class HomeController extends GetxController {
   List<CustomerReceivableDto> get filteredReceivables {
     final query = receivablesSearchQuery.value.trim().toLowerCase();
     if (query.isEmpty) return customerReceivables;
-    return customerReceivables.where((c) => c.name.toLowerCase().contains(query)).toList();
+    return customerReceivables
+        .where((c) => c.name.toLowerCase().contains(query))
+        .toList();
   }
 }

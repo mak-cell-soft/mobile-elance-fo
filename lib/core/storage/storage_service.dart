@@ -65,26 +65,32 @@ class StorageService {
     // 1. Fresh enterprise cache
     final ent = enterpriseInfo;
     if (ent != null) {
-      final val = _toBool(ent['ismanagingconstructions'] ?? ent['isManagingConstructions']);
+      final val = _toBool(
+        ent['ismanagingconstructions'] ?? ent['isManagingConstructions'],
+      );
       if (val != null) return val;
     }
 
     // 2. JWT claim from session
     final claims = _jwtPayload;
     if (claims != null) {
-      final val = _toBool(claims['IsManagingConstructions'] ??
-          claims['isManagingConstructions'] ??
-          claims['ismanagingconstructions']);
+      final val = _toBool(
+        claims['IsManagingConstructions'] ??
+            claims['isManagingConstructions'] ??
+            claims['ismanagingconstructions'],
+      );
       if (val != null) return val;
     }
 
     // 3. Tenant config
     final cfg = tenantConfig;
     if (cfg != null) {
-      final val = _toBool(cfg['isManagingConstructions'] ??
-          cfg['ismanagingconstructions'] ??
-          cfg['hasChantierModule'] ??
-          cfg['hasChantiers']);
+      final val = _toBool(
+        cfg['isManagingConstructions'] ??
+            cfg['ismanagingconstructions'] ??
+            cfg['hasChantierModule'] ??
+            cfg['hasChantiers'],
+      );
       if (val != null) return val;
     }
 
@@ -108,19 +114,110 @@ class StorageService {
     // 3. Runtime tenant config check
     final cfg = tenantConfig;
     if (cfg != null) {
-      final flag = _toBool(cfg['hasChantierModule'] ??
-          cfg['hasChantiers'] ??
-          cfg['isManagingConstructions'] ??
-          cfg['ismanagingconstructions']);
+      final flag = _toBool(
+        cfg['hasChantierModule'] ??
+            cfg['hasChantiers'] ??
+            cfg['isManagingConstructions'] ??
+            cfg['ismanagingconstructions'],
+      );
       if (flag == false) {
         return false;
       }
 
-      final modules = cfg['modules'] ?? cfg['features'] ?? cfg['enabledModules'];
+      final modules =
+          cfg['modules'] ?? cfg['features'] ?? cfg['enabledModules'];
       if (modules is List && modules.isNotEmpty) {
         final hasModule = modules.any((m) {
           final s = m.toString().toLowerCase();
-          return s == 'chantier' || s == 'chantiers' || s == 'site' || s == 'sites';
+          return s == 'chantier' ||
+              s == 'chantiers' ||
+              s == 'site' ||
+              s == 'sites';
+        });
+        if (!hasModule) return false;
+      }
+    }
+
+    return true;
+  }
+
+  /// Returns whether the enterprise manages production (tenant-level feature flag for Production module).
+  /// Sourced with fallback priority matching fo-acya-app/elance-app.ui useTenantFeatures:
+  /// 1. Fresh enterprise info (GET /Enterprise/getbyid/{id}) stored in local storage
+  /// 2. JWT claim 'IsManagingProduction' decoded from session token
+  /// 3. Active tenant configuration (assets or backend)
+  /// 4. Compile-time build configuration [TenantBuildConfig.hasProductionModule]
+  bool get isManagingProduction {
+    // 1. Fresh enterprise cache
+    final ent = enterpriseInfo;
+    if (ent != null) {
+      final val = _toBool(
+        ent['ismanagingproduction'] ?? ent['isManagingProduction'],
+      );
+      if (val != null) return val;
+    }
+
+    // 2. JWT claim from session
+    final claims = _jwtPayload;
+    if (claims != null) {
+      final val = _toBool(
+        claims['IsManagingProduction'] ??
+            claims['isManagingProduction'] ??
+            claims['ismanagingproduction'],
+      );
+      if (val != null) return val;
+    }
+
+    // 3. Tenant config
+    final cfg = tenantConfig;
+    if (cfg != null) {
+      final val = _toBool(
+        cfg['isManagingProduction'] ??
+            cfg['ismanagingproduction'] ??
+            cfg['hasProductionModule'] ??
+            cfg['hasProduction'],
+      );
+      if (val != null) return val;
+    }
+
+    // 4. Default fallback
+    return TenantBuildConfig.hasProductionModule;
+  }
+
+  /// Checks whether the active tenant has the Production module enabled.
+  /// 1. First verifies compile-time build configuration [TenantBuildConfig.hasProductionModule].
+  /// 2. When authenticated, evaluates tenant feature flag [isManagingProduction].
+  /// 3. Evaluates runtime tenant config (`hasProductionModule`, `hasProduction`, or `modules` list).
+  bool get hasProductionModule {
+    // 1. Compile-time check (e.g. flavor or --dart-define=HAS_PRODUCTION_MODULE=false)
+    if (!TenantBuildConfig.hasProductionModule) return false;
+
+    // 2. If logged in, evaluate tenant feature flag
+    if (isLoggedIn && !isManagingProduction) {
+      return false;
+    }
+
+    // 3. Runtime tenant config check
+    final cfg = tenantConfig;
+    if (cfg != null) {
+      final flag = _toBool(
+        cfg['hasProductionModule'] ??
+            cfg['hasProduction'] ??
+            cfg['isManagingProduction'] ??
+            cfg['ismanagingproduction'],
+      );
+      if (flag == false) {
+        return false;
+      }
+
+      final modules =
+          cfg['modules'] ?? cfg['features'] ?? cfg['enabledModules'];
+      if (modules is List && modules.isNotEmpty) {
+        final hasModule = modules.any((m) {
+          final s = m.toString().toLowerCase();
+          return s == 'production' ||
+              s == 'fabrication' ||
+              s == 'manufacturing';
         });
         if (!hasModule) return false;
       }
@@ -187,7 +284,8 @@ class StorageService {
   int? get userId {
     final claims = _jwtPayload;
     if (claims == null) return null;
-    final val = claims['nameid'] ??
+    final val =
+        claims['nameid'] ??
         claims['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ??
         claims['sub'];
     if (val == null) return null;
@@ -206,7 +304,8 @@ class StorageService {
   int? get defaultSiteId {
     final claims = _jwtPayload;
     if (claims == null) return null;
-    final val = claims['DefaultSiteId'] ??
+    final val =
+        claims['DefaultSiteId'] ??
         claims['defaultSiteId'] ??
         claims['SiteId'] ??
         claims['siteId'];
@@ -225,7 +324,8 @@ class StorageService {
   String? get userRole {
     final claims = _jwtPayload;
     if (claims == null) return null;
-    final val = claims['role'] ??
+    final val =
+        claims['role'] ??
         claims['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] ??
         claims['Role'] ??
         claims['roles'];
@@ -239,7 +339,8 @@ class StorageService {
   bool get isAdmin {
     final claims = _jwtPayload;
     if (claims != null) {
-      final val = claims['role'] ??
+      final val =
+          claims['role'] ??
           claims['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] ??
           claims['Role'] ??
           claims['roles'];
@@ -253,10 +354,7 @@ class StorageService {
     final role = userRole;
     if (role == null) return false;
     final r = role.trim().toLowerCase();
-    return r == 'admin' ||
-        r == 'superadmin' ||
-        r == '10' ||
-        r == '20';
+    return r == 'admin' || r == 'superadmin' || r == '10' || r == '20';
   }
 
   /// Translates application roles to user-friendly French terms, matching navbar.tsx logic.
@@ -310,7 +408,8 @@ class StorageService {
   int? get enterpriseId {
     final claims = _jwtPayload;
     if (claims == null) return null;
-    final val = claims['EnterpriseId'] ??
+    final val =
+        claims['EnterpriseId'] ??
         claims['enterpriseId'] ??
         claims['enterprise_id'];
     if (val == null) return null;
@@ -340,8 +439,15 @@ class StorageService {
     if (isAdmin) return true;
 
     // Chantiers is primarily governed by tenant subscription/feature flag
-    if (module.toLowerCase() == 'chantier' || module.toLowerCase() == 'chantiers') {
+    if (module.toLowerCase() == 'chantier' ||
+        module.toLowerCase() == 'chantiers') {
       return hasChantierModule;
+    }
+
+    // Production is governed by tenant subscription/feature flag
+    if (module.toLowerCase() == 'production' ||
+        module.toLowerCase() == 'fabrication') {
+      return hasProductionModule;
     }
 
     final perms = permissions;

@@ -16,7 +16,6 @@ import '../widgets/receivables_chart_widget.dart';
 import '../widgets/supplier_chart_widget.dart';
 import '../widgets/top_subcategory_chart_widget.dart';
 
-
 /// Executive Home Dashboard View following modern Stitch UI principles.
 /// Features a branded AppBar, welcome banner with user role highlight,
 /// admin-only executive analytics cards & charts, and interactive feature navigation modules.
@@ -56,7 +55,9 @@ class HomeView extends GetView<HomeController> {
                 isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
                 size: 22,
               ),
-              tooltip: isDark ? 'Passer en Mode Clair' : 'Passer en Mode Sombre',
+              tooltip: isDark
+                  ? 'Passer en Mode Clair'
+                  : 'Passer en Mode Sombre',
               onPressed: () => ThemeService.instance.toggleTheme(),
             );
           }),
@@ -68,7 +69,10 @@ class HomeView extends GetView<HomeController> {
             return Badge(
               label: Text(
                 '$count',
-                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               isLabelVisible: count > 0,
               backgroundColor: const Color(0xFFD97706),
@@ -123,9 +127,9 @@ class HomeView extends GetView<HomeController> {
               // --- 3. MODULES & OUTILS SECTION ---
               Text(
                 'Modules & Outils',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 14),
 
@@ -136,7 +140,9 @@ class HomeView extends GetView<HomeController> {
                 description: 'Consulter, filtrer et rechercher les articles',
                 icon: Icons.inventory_2_rounded,
                 iconColor: colorScheme.primary,
-                backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                backgroundColor: colorScheme.primaryContainer.withValues(
+                  alpha: 0.6,
+                ),
                 onTap: () => Get.toNamed(AppRoutes.articles),
               ),
 
@@ -149,7 +155,9 @@ class HomeView extends GetView<HomeController> {
                 description: 'Liste des clients, contacts et soldes actuels',
                 icon: Icons.people_alt_rounded,
                 iconColor: colorScheme.secondary,
-                backgroundColor: colorScheme.secondaryContainer.withValues(alpha: 0.6),
+                backgroundColor: colorScheme.secondaryContainer.withValues(
+                  alpha: 0.6,
+                ),
                 onTap: () => Get.toNamed(AppRoutes.customers),
               ),
 
@@ -163,11 +171,31 @@ class HomeView extends GetView<HomeController> {
                   child: _buildModuleCard(
                     context,
                     title: 'Gestion des Chantiers',
-                    description: 'Général, suivi d\'avancement & caisse terrain',
+                    description:
+                        'Général, suivi d\'avancement & caisse terrain',
                     icon: Icons.construction_rounded,
                     iconColor: const Color(0xFF2563EB),
                     backgroundColor: const Color(0xFFEFF6FF),
                     onTap: () => Get.toNamed(AppRoutes.chantiers),
+                  ),
+                );
+              }),
+
+              // Module Card: Production & Fabrication
+              Obx(() {
+                if (!controller.hasProductionModule.value) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: _buildModuleCard(
+                    context,
+                    title: 'Production',
+                    description: 'Suivi des ordres de fabrication & étapes',
+                    icon: Icons.precision_manufacturing_rounded,
+                    iconColor: const Color(0xFF059669),
+                    backgroundColor: const Color(0xFFECFDF5),
+                    onTap: () => Get.toNamed(AppRoutes.production),
                   ),
                 );
               }),
@@ -178,7 +206,8 @@ class HomeView extends GetView<HomeController> {
                 _buildModuleCard(
                   context,
                   title: 'Bons de Réception (BR)',
-                  description: 'Consulter les réceptions fournisseurs, statuts et totaux',
+                  description:
+                      'Consulter les réceptions fournisseurs, statuts et totaux',
                   icon: Icons.inventory_2_rounded,
                   iconColor: const Color(0xFFD97706),
                   backgroundColor: const Color(0xFFFEF3C7),
@@ -189,10 +218,13 @@ class HomeView extends GetView<HomeController> {
                 _buildModuleCard(
                   context,
                   title: 'Paramètres Système',
-                  description: 'Plafonds journaliers & automations de facturation',
+                  description:
+                      'Plafonds journaliers & automations de facturation',
                   icon: Icons.settings_suggest_rounded,
                   iconColor: colorScheme.tertiary,
-                  backgroundColor: colorScheme.tertiaryContainer.withValues(alpha: 0.6),
+                  backgroundColor: colorScheme.tertiaryContainer.withValues(
+                    alpha: 0.6,
+                  ),
                   onTap: () => Get.toNamed(AppRoutes.settings),
                   badgeLabel: 'ADMIN',
                 ),
@@ -206,7 +238,10 @@ class HomeView extends GetView<HomeController> {
 
   /// Builds the top Hero Banner displaying greeting, role badge, and profile trigger.
   Widget _buildHeroBanner(
-      BuildContext context, StorageService storage, ColorScheme colorScheme) {
+    BuildContext context,
+    StorageService storage,
+    ColorScheme colorScheme,
+  ) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -235,7 +270,10 @@ class HomeView extends GetView<HomeController> {
             children: [
               // Tenant Slug Chip
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: colorScheme.onPrimary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
@@ -254,7 +292,10 @@ class HomeView extends GetView<HomeController> {
 
               // User Role Badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF59E0B), // Amber Gold
                   borderRadius: BorderRadius.circular(12),
@@ -268,7 +309,11 @@ class HomeView extends GetView<HomeController> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.shield_outlined, size: 13, color: Colors.white),
+                    const Icon(
+                      Icons.shield_outlined,
+                      size: 13,
+                      color: Colors.white,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       storage.translatedRole,
@@ -298,9 +343,9 @@ class HomeView extends GetView<HomeController> {
           Text(
             'Bonjour, ${storage.fullName ?? 'Utilisateur'}',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: colorScheme.onPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
+              color: colorScheme.onPrimary,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
@@ -360,9 +405,7 @@ class HomeView extends GetView<HomeController> {
             color: colorScheme.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(20),
           ),
-          child: const Center(
-            child: CircularProgressIndicator(),
-          ),
+          child: const Center(child: CircularProgressIndicator()),
         );
       }
 
@@ -376,11 +419,15 @@ class HomeView extends GetView<HomeController> {
           ),
           child: Row(
             children: [
-              Icon(Icons.account_balance_wallet_outlined, color: colorScheme.error),
+              Icon(
+                Icons.account_balance_wallet_outlined,
+                color: colorScheme.error,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  controller.treasuryErrorMessage.value ?? 'Erreur lors du chargement de la trésorerie',
+                  controller.treasuryErrorMessage.value ??
+                      'Erreur lors du chargement de la trésorerie',
                   style: TextStyle(color: colorScheme.error, fontSize: 13),
                 ),
               ),
@@ -408,9 +455,9 @@ class HomeView extends GetView<HomeController> {
           children: [
             Text(
               'Aperçu Analytique',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             IconButton(
               icon: const Icon(Icons.refresh_rounded, size: 22),
@@ -433,9 +480,7 @@ class HomeView extends GetView<HomeController> {
                 color: colorScheme.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
+              child: const Center(child: CircularProgressIndicator()),
             );
           }
 
@@ -452,7 +497,8 @@ class HomeView extends GetView<HomeController> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      controller.errorMessage.value ?? 'Erreur lors du chargement',
+                      controller.errorMessage.value ??
+                          'Erreur lors du chargement',
                       style: TextStyle(color: colorScheme.error, fontSize: 13),
                     ),
                   ),
@@ -497,9 +543,7 @@ class HomeView extends GetView<HomeController> {
               const SizedBox(height: 18),
 
               // Chart 1: Achats vs Règlements par Fournisseur
-              SupplierChartWidget(
-                dataPoints: controller.supplierChartPoints,
-              ),
+              SupplierChartWidget(dataPoints: controller.supplierChartPoints),
 
               const SizedBox(height: 18),
 
@@ -507,7 +551,8 @@ class HomeView extends GetView<HomeController> {
               ReceivablesChartWidget(
                 receivables: controller.filteredReceivables,
                 searchQuery: controller.receivablesSearchQuery.value,
-                onSearchChanged: (val) => controller.receivablesSearchQuery.value = val,
+                onSearchChanged: (val) =>
+                    controller.receivablesSearchQuery.value = val,
               ),
             ],
           );
@@ -560,9 +605,13 @@ class HomeView extends GetView<HomeController> {
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                              color: const Color(
+                                0xFFF59E0B,
+                              ).withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(

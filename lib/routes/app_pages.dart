@@ -15,6 +15,9 @@ import '../features/home/bindings/home_binding.dart';
 import '../features/home/views/home_view.dart';
 import '../features/notifications/bindings/notifications_binding.dart';
 import '../features/notifications/views/notifications_view.dart';
+import '../features/production/bindings/production_binding.dart';
+import '../features/production/views/production_dashboard_view.dart';
+import '../features/production/views/production_detail_view.dart';
 import '../features/purchases/bindings/receipts_binding.dart';
 import '../features/purchases/views/receipts_list_view.dart';
 import '../features/settings/bindings/settings_binding.dart';
@@ -84,6 +87,18 @@ abstract class AppPages {
       binding: ReceiptsBinding(),
       middlewares: [AdminGuardMiddleware()],
     ),
+    GetPage(
+      name: AppRoutes.production,
+      page: () => const ProductionDashboardView(),
+      binding: ProductionBinding(),
+      middlewares: [ProductionGuardMiddleware()],
+    ),
+    GetPage(
+      name: AppRoutes.productionDetail,
+      page: () => const ProductionDetailView(),
+      binding: ProductionBinding(),
+      middlewares: [ProductionGuardMiddleware()],
+    ),
   ];
 }
 
@@ -103,6 +118,17 @@ class ChantierGuardMiddleware extends GetMiddleware {
   @override
   RouteSettings? redirect(String? route) {
     if (!StorageService.instance.hasChantierModule) {
+      return const RouteSettings(name: AppRoutes.home);
+    }
+    return null;
+  }
+}
+
+/// Route guard redirecting to Home if the active tenant does not have the Production module.
+class ProductionGuardMiddleware extends GetMiddleware {
+  @override
+  RouteSettings? redirect(String? route) {
+    if (!StorageService.instance.hasProductionModule) {
       return const RouteSettings(name: AppRoutes.home);
     }
     return null;

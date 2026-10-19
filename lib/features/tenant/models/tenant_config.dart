@@ -24,6 +24,8 @@ class TenantConfig {
   final String? status;
   final bool hasChantierModule;
   final bool isManagingConstructions;
+  final bool hasProductionModule;
+  final bool isManagingProduction;
 
   TenantConfig({
     this.tenantId,
@@ -45,6 +47,8 @@ class TenantConfig {
     this.status,
     this.hasChantierModule = true,
     this.isManagingConstructions = true,
+    this.hasProductionModule = true,
+    this.isManagingProduction = true,
   });
 
   bool get isActive => status != 'Suspended' && status != 'Expired';
@@ -97,6 +101,8 @@ class TenantConfig {
       status: 'Active',
       hasChantierModule: TenantBuildConfig.hasChantierModule,
       isManagingConstructions: TenantBuildConfig.hasChantierModule,
+      hasProductionModule: TenantBuildConfig.hasProductionModule,
+      isManagingProduction: TenantBuildConfig.hasProductionModule,
     );
   }
 
@@ -110,67 +116,121 @@ class TenantConfig {
       return defaultValue;
     }
 
-    final dynamic explicitChantierFlag = json['hasChantierModule'] ??
+    final dynamic explicitChantierFlag =
+        json['hasChantierModule'] ??
         json['hasChantiers'] ??
         json['isManagingConstructions'] ??
         json['ismanagingconstructions'];
 
     final bool hasChantier = explicitChantierFlag != null
-        ? parseBoolFlag(explicitChantierFlag, defaultValue: TenantBuildConfig.hasChantierModule)
+        ? parseBoolFlag(
+            explicitChantierFlag,
+            defaultValue: TenantBuildConfig.hasChantierModule,
+          )
         : TenantBuildConfig.hasChantierModule;
 
-    final dynamic explicitManagingConstructions = json['isManagingConstructions'] ??
+    final dynamic explicitManagingConstructions =
+        json['isManagingConstructions'] ??
         json['ismanagingconstructions'] ??
         explicitChantierFlag;
 
     final bool managingConstructions = explicitManagingConstructions != null
-        ? parseBoolFlag(explicitManagingConstructions, defaultValue: hasChantier)
+        ? parseBoolFlag(
+            explicitManagingConstructions,
+            defaultValue: hasChantier,
+          )
         : hasChantier;
+
+    final dynamic explicitProductionFlag =
+        json['hasProductionModule'] ??
+        json['hasProduction'] ??
+        json['isManagingProduction'] ??
+        json['ismanagingproduction'];
+
+    final bool hasProduction = explicitProductionFlag != null
+        ? parseBoolFlag(
+            explicitProductionFlag,
+            defaultValue: TenantBuildConfig.hasProductionModule,
+          )
+        : TenantBuildConfig.hasProductionModule;
+
+    final dynamic explicitManagingProduction =
+        json['isManagingProduction'] ??
+        json['ismanagingproduction'] ??
+        explicitProductionFlag;
+
+    final bool managingProduction = explicitManagingProduction != null
+        ? parseBoolFlag(explicitManagingProduction, defaultValue: hasProduction)
+        : hasProduction;
 
     return TenantConfig(
       tenantId: json['tenantId']?.toString() ?? TenantBuildConfig.tenantId,
-      companyName: json['companyName']?.toString() ?? json['name']?.toString() ?? TenantBuildConfig.companyName,
-      appName: json['appName']?.toString() ?? json['name']?.toString() ?? TenantBuildConfig.appName,
-      packageName: json['packageName']?.toString() ?? TenantBuildConfig.packageName,
-      name: json['name']?.toString() ?? json['appName']?.toString() ?? TenantBuildConfig.appName,
+      companyName:
+          json['companyName']?.toString() ??
+          json['name']?.toString() ??
+          TenantBuildConfig.companyName,
+      appName:
+          json['appName']?.toString() ??
+          json['name']?.toString() ??
+          TenantBuildConfig.appName,
+      packageName:
+          json['packageName']?.toString() ?? TenantBuildConfig.packageName,
+      name:
+          json['name']?.toString() ??
+          json['appName']?.toString() ??
+          TenantBuildConfig.appName,
       logo: json['logo']?.toString() ?? TenantBuildConfig.logoPath,
       logoUrl: json['logoUrl']?.toString(),
       faviconUrl: json['faviconUrl']?.toString(),
-      primaryColor: json['primaryColor']?.toString() ?? TenantBuildConfig.primaryColor,
-      secondaryColor: json['secondaryColor']?.toString() ?? TenantBuildConfig.secondaryColor,
+      primaryColor:
+          json['primaryColor']?.toString() ?? TenantBuildConfig.primaryColor,
+      secondaryColor:
+          json['secondaryColor']?.toString() ??
+          TenantBuildConfig.secondaryColor,
       baseUrl: json['baseUrl']?.toString() ?? TenantBuildConfig.baseUrl,
-      environment: json['environment']?.toString() ?? TenantBuildConfig.environment,
-      supportedLocales: json['supportedLocales']?.toString() ?? TenantBuildConfig.supportedLocales,
-      assetsPath: json['assetsPath']?.toString() ?? TenantBuildConfig.assetsPath,
-      language: json['language']?.toString() ?? TenantBuildConfig.supportedLocales,
+      environment:
+          json['environment']?.toString() ?? TenantBuildConfig.environment,
+      supportedLocales:
+          json['supportedLocales']?.toString() ??
+          TenantBuildConfig.supportedLocales,
+      assetsPath:
+          json['assetsPath']?.toString() ?? TenantBuildConfig.assetsPath,
+      language:
+          json['language']?.toString() ?? TenantBuildConfig.supportedLocales,
       currency: json['currency']?.toString() ?? 'MAD',
       status: json['status']?.toString() ?? 'Active',
       hasChantierModule: hasChantier,
       isManagingConstructions: managingConstructions,
+      hasProductionModule: hasProduction,
+      isManagingProduction: managingProduction,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'tenantId': tenantId ?? TenantBuildConfig.tenantId,
-        'companyName': companyName ?? TenantBuildConfig.companyName,
-        'appName': appName ?? TenantBuildConfig.appName,
-        'packageName': packageName ?? TenantBuildConfig.packageName,
-        'name': name ?? TenantBuildConfig.appName,
-        'logo': logo ?? TenantBuildConfig.logoPath,
-        if (logoUrl != null) 'logoUrl': logoUrl,
-        if (faviconUrl != null) 'faviconUrl': faviconUrl,
-        'primaryColor': primaryColor ?? TenantBuildConfig.primaryColor,
-        'secondaryColor': secondaryColor ?? TenantBuildConfig.secondaryColor,
-        'baseUrl': baseUrl ?? TenantBuildConfig.baseUrl,
-        'environment': environment ?? TenantBuildConfig.environment,
-        'supportedLocales': supportedLocales ?? TenantBuildConfig.supportedLocales,
-        'assetsPath': assetsPath ?? TenantBuildConfig.assetsPath,
-        'language': language ?? TenantBuildConfig.supportedLocales,
-        if (currency != null) 'currency': currency,
-        'status': status ?? 'Active',
-        'hasChantierModule': hasChantierModule,
-        'hasChantiers': hasChantierModule,
-        'isManagingConstructions': isManagingConstructions,
-        'ismanagingconstructions': isManagingConstructions,
-      };
+    'tenantId': tenantId ?? TenantBuildConfig.tenantId,
+    'companyName': companyName ?? TenantBuildConfig.companyName,
+    'appName': appName ?? TenantBuildConfig.appName,
+    'packageName': packageName ?? TenantBuildConfig.packageName,
+    'name': name ?? TenantBuildConfig.appName,
+    'logo': logo ?? TenantBuildConfig.logoPath,
+    if (logoUrl != null) 'logoUrl': logoUrl,
+    if (faviconUrl != null) 'faviconUrl': faviconUrl,
+    'primaryColor': primaryColor ?? TenantBuildConfig.primaryColor,
+    'secondaryColor': secondaryColor ?? TenantBuildConfig.secondaryColor,
+    'baseUrl': baseUrl ?? TenantBuildConfig.baseUrl,
+    'environment': environment ?? TenantBuildConfig.environment,
+    'supportedLocales': supportedLocales ?? TenantBuildConfig.supportedLocales,
+    'assetsPath': assetsPath ?? TenantBuildConfig.assetsPath,
+    'language': language ?? TenantBuildConfig.supportedLocales,
+    if (currency != null) 'currency': currency,
+    'status': status ?? 'Active',
+    'hasChantierModule': hasChantierModule,
+    'hasChantiers': hasChantierModule,
+    'isManagingConstructions': isManagingConstructions,
+    'ismanagingconstructions': isManagingConstructions,
+    'hasProductionModule': hasProductionModule,
+    'hasProduction': hasProductionModule,
+    'isManagingProduction': isManagingProduction,
+    'ismanagingproduction': isManagingProduction,
+  };
 }
