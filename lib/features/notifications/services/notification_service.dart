@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/network/api_client.dart';
 import '../models/app_notification.dart';
 import '../models/stock_alert.dart';
@@ -74,5 +75,66 @@ class NotificationService {
           .toList();
     }
     return [];
+  }
+
+  /// Registers an FCM device token with the backend device registration API (`POST notifications/devices/register`).
+  Future<bool> registerDeviceToken({
+    required String token,
+    String platform = 'android',
+    String? appVersion,
+  }) async {
+    try {
+      final response = await _dio.post(
+        'notifications/devices/register',
+        data: {
+          'token': token,
+          'platform': platform,
+          'appVersion': ?appVersion,
+        },
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        // Expected deployment boundary: backend endpoints not yet deployed to production VPS
+        // Record as diagnostic without crash or infinite retry.
+        debugPrint(
+          '[NotificationService] Device registration endpoint not found on server (404 - pending backend deployment).',
+        );
+      } else {
+        debugPrint(
+          '[NotificationService] Failed to register device token: ${e.response?.statusCode}',
+        );
+      }
+      return false;
+    } catch (_) {
+      debugPrint('[NotificationService] Unexpected error registering device token.');
+      return false;
+    }
+  }
+
+  /// Unregisters an FCM device token from the backend device registration API (`POST notifications/devices/unregister`).
+  Future<bool> unregisterDeviceToken({required String token}) async {
+    try {
+      final response = await _dio.post(
+        'notifications/devices/unregister',
+        data: {'token': token},
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        // Expected deployment boundary: backend endpoints not yet deployed to production VPS
+        debugPrint(
+          '[NotificationService] Device unregister endpoint not found on server (404 - pending backend deployment).',
+        );
+      } else {
+        debugPrint(
+          '[NotificationService] Failed to unregister device token: ${e.response?.statusCode}',
+        );
+      }
+      return false;
+    } catch (_) {
+      debugPrint('[NotificationService] Unexpected error unregistering device token.');
+      return false;
+    }
   }
 }

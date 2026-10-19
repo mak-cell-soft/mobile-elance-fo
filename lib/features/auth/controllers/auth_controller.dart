@@ -7,6 +7,8 @@ import '../../tenant/models/tenant_config.dart';
 import '../../tenant/services/enterprise_service.dart';
 import '../../tenant/services/tenant_service.dart';
 import '../services/auth_service.dart';
+import '../../../core/config/env.dart';
+import '../../notifications/services/fcm_service.dart';
 
 class AuthController extends GetxController {
   final AuthService _service = AuthService();
@@ -125,6 +127,11 @@ class AuthController extends GetxController {
         }
       }
 
+      // Attempt FCM device token registration for supported flavors
+      if (EnvConfig.supportsFcm) {
+        FcmService.instance.registerCurrentToken();
+      }
+
       status.value = ViewStatus.success;
       return true;
     } on ApiException catch (e) {
@@ -135,7 +142,19 @@ class AuthController extends GetxController {
   }
 
   Future<void> logout() async {
+    // 1. Attempt token unregistration while session and tenant context are still available
+    if (EnvConfig.supportsFcm) {
+      try {
+        await FcmService.instance.unregisterCurrentToken();
+      } catch (_) {
+        // Non-fatal: unregistration failure must never prevent local session clearing
+      }
+    }
+
+    // 2. Clear credentials and session data
     await StorageService.instance.clearSession();
+
+    // 3. Navigate to login
     Get.offAllNamed(AppRoutes.login);
   }
 }

@@ -34,4 +34,8 @@ class EnvConfig {
   }
 
   static bool get isProduction => flavor == Flavor.production;
+
+  /// Whether Firebase Cloud Messaging (FCM) is supported and active for this flavor.
+  static bool get supportsFcm =>
+      flavor == Flavor.development || flavor == Flavor.production;
 }

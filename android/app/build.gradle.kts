@@ -3,7 +3,13 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services")
 }
+
+googleServices {
+    missingGoogleServicesStrategy = com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy.IGNORE
+}
+
 
 android {
     namespace = "com.example.woodapp"
@@ -23,7 +29,7 @@ android {
         val customAppId = (project.findProperty("APPLICATION_ID") as? String) ?: System.getenv("PACKAGE_NAME")
         val customAppName = (project.findProperty("APP_NAME") as? String) ?: System.getenv("APP_NAME")
 
-        applicationId = customAppId ?: "com.example.woodapp"
+        applicationId = customAppId ?: "com.acya.woodapp"
         resValue("string", "app_name", customAppName ?: "WoodApp")
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
@@ -57,19 +63,19 @@ android {
         }
         create("socofeb") {
             dimension = "tenant"
-            applicationId = if (!customAppId.isNullOrBlank() && (customFlavor == "socofeb" || customFlavor.isNullOrBlank())) customAppId else "com.socofeb.woodapp"
+            applicationId = if (!customAppId.isNullOrBlank() && (customFlavor == "socofeb" || customFlavor.isNullOrBlank())) customAppId else "com.acya.woodapp"
             resValue("string", "app_name", if (!customAppName.isNullOrBlank() && (customFlavor == "socofeb" || customFlavor.isNullOrBlank())) customAppName else "socofeb")
         }
         create("mansour_construction") {
             dimension = "tenant"
-            applicationId = if (!customAppId.isNullOrBlank() && customFlavor == "mansour_construction") customAppId else "com.mansourconstruction.woodapp"
+            applicationId = if (!customAppId.isNullOrBlank() && customFlavor == "mansour_construction") customAppId else "com.acya.woodapp"
             resValue("string", "app_name", if (!customAppName.isNullOrBlank() && customFlavor == "mansour_construction") customAppName else "Mansour Construction")
         }
 
         if (!customFlavor.isNullOrBlank() && customFlavor != "development" && customFlavor != "socofeb" && customFlavor != "mansour_construction") {
             create(customFlavor) {
                 dimension = "tenant"
-                applicationId = customAppId ?: "com.$customFlavor.woodapp"
+                applicationId = customAppId ?: "com.acya.woodapp"
                 resValue("string", "app_name", customAppName ?: customFlavor)
             }
         }

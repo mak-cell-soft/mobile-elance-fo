@@ -1,18 +1,27 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../../../core/config/env.dart';
 import '../../../core/storage/storage_service.dart';
 import '../../../core/utils/view_status.dart';
 import '../../../routes/app_routes.dart';
 import '../models/app_notification.dart';
 import '../models/stock_alert.dart';
 import '../models/transfer_notification.dart';
+import '../services/fcm_service.dart';
 import '../services/notification_service.dart';
 
 /// GetX Controller managing notification state, unread counters, periodic polling,
 /// and instant in-app alerts for pending caisse cash requests and system events.
 class NotificationController extends GetxController {
-  final NotificationService _service = NotificationService();
+  final NotificationService _service;
+  final bool _enablePolling;
+
+  NotificationController({
+    NotificationService? service,
+    bool enablePolling = true,
+  })  : _service = service ?? NotificationService(),
+        _enablePolling = enablePolling;
 
   final status = ViewStatus.initial.obs;
   final errorMessage = RxnString();
@@ -24,6 +33,14 @@ class NotificationController extends GetxController {
   Timer? _pollingTimer;
   final Set<int> _knownNotificationIds = {};
   bool _isFirstLoad = true;
+
+  // Concurrency and race condition guards
+  bool _isPolling = false;
+  bool _hasPendingRefresh = false;
+  int _pollSequence = 0;
+
+  @visibleForTesting
+  Function(AppNotification item)? onNotificationFeedbackForTesting;
 
   /// Total count of unread items across all notification categories.
   int get unreadCount =>
@@ -39,13 +56,36 @@ class NotificationController extends GetxController {
   void onInit() {
     super.onInit();
     loadAll();
-    _startPolling();
+    if (_enablePolling) {
+      _startPolling();
+    }
+    _registerFcmForegroundHandler();
   }
 
   @override
   void onClose() {
     _pollingTimer?.cancel();
+    if (EnvConfig.supportsFcm) {
+      if (FcmService.instance.onForegroundNotification != null) {
+        FcmService.instance.onForegroundNotification = null;
+      }
+    }
     super.onClose();
+  }
+
+  /// Automatically registers this controller as the foreground FCM listener if in a supported flavor.
+  void _registerFcmForegroundHandler() {
+    if (EnvConfig.supportsFcm) {
+      FcmService.instance.onForegroundNotification = ({notificationId, rawMessage}) {
+        onForegroundMessage(notificationId: notificationId);
+      };
+    }
+  }
+
+  /// Handles a foreground notification event received via FCM.
+  /// Triggers an immediate authoritative state refresh without waiting for polling.
+  Future<void> onForegroundMessage({int? notificationId}) async {
+    await pollForUpdates();
   }
 
   /// Starts background polling every 30 seconds while user is logged in.
@@ -93,10 +133,25 @@ class NotificationController extends GetxController {
     }
   }
 
-  /// Silent background update that triggers notifications for newly arrived items.
+  /// Silent background update or push-triggered refresh that fetches unreads
+  /// and triggers heads-up feedback for newly arrived items.
   Future<void> pollForUpdates() async {
+    if (_isPolling) {
+      _hasPendingRefresh = true;
+      return;
+    }
+
+    _isPolling = true;
+    final currentSeq = ++_pollSequence;
+
     try {
       final unreads = await _service.fetchUnreads();
+
+      // Discard older responses if a newer poll sequence was initiated
+      if (currentSeq < _pollSequence) {
+        return;
+      }
+
       final newItems = <AppNotification>[];
 
       for (final item in unreads) {
@@ -115,19 +170,59 @@ class NotificationController extends GetxController {
         return;
       }
 
-      // If new notifications arrived and current user is an Admin, notify in real-time
-      if (StorageService.instance.isAdmin && newItems.isNotEmpty) {
+      // If new notifications arrived, display heads-up feedback
+      if (newItems.isNotEmpty) {
         for (final item in newItems) {
-          _notifyAdminInRealTime(item);
+          if (StorageService.instance.isAdmin) {
+            _notifyAdminInRealTime(item);
+          } else {
+            _notifyUserInRealTime(item);
+          }
         }
       }
     } catch (_) {
       // Non-blocking silent error during polling
+    } finally {
+      _isPolling = false;
+      if (_hasPendingRefresh) {
+        _hasPendingRefresh = false;
+        // Trigger subsequent refresh to capture events that arrived while polling was active
+        pollForUpdates();
+      }
     }
+  }
+
+  /// Displays an in-app heads-up banner to standard users for real-time notification
+  void _notifyUserInRealTime(AppNotification item) {
+    if (onNotificationFeedbackForTesting != null) {
+      onNotificationFeedbackForTesting!(item);
+    }
+    if (Get.overlayContext == null) return;
+
+    Get.snackbar(
+      item.title,
+      item.message,
+      icon: const Icon(
+        Icons.notifications_active_rounded,
+        color: Colors.white,
+        size: 24,
+      ),
+      backgroundColor: const Color(0xFF1E3A8A),
+      colorText: Colors.white,
+      snackPosition: SnackPosition.TOP,
+      margin: const EdgeInsets.all(16),
+      borderRadius: 14,
+      duration: const Duration(seconds: 4),
+    );
   }
 
   /// Displays an in-app heads-up banner to the administrator for real-time notification
   void _notifyAdminInRealTime(AppNotification item) {
+    if (onNotificationFeedbackForTesting != null) {
+      onNotificationFeedbackForTesting!(item);
+    }
+    if (Get.overlayContext == null) return;
+
     final isCaisse = item.isCaisseRequest;
     final chantierId = item.chantierIdFromAction;
     final canAccessChantier = StorageService.instance.hasChantierModule;
