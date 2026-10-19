@@ -311,6 +311,8 @@ jobs:
           import json, os, sys, base64
 
           api_env = os.environ.get('API_ENVIRONMENT', 'production').strip().lower()
+          if not api_env:
+              api_env = 'production'
           flavor = os.environ.get('FLAVOR_NAME', '').strip().lower()
           b64_content = os.environ.get('FIREBASE_BASE64', '').strip()
           runner_temp = os.environ.get('RUNNER_TEMP', '/tmp')
@@ -321,42 +323,50 @@ jobs:
           firebase_status = 'WARNING_MISSING_CONFIG'
           status_reason = 'Secret FIREBASE_GOOGLE_SERVICES_BASE64 is empty or not set.'
           is_ready = False
-          is_preprod = (api_env == 'preprod' or flavor == 'preprod')
+          is_production = (api_env == 'production')
+          is_preprod = (api_env == 'preprod' or (not is_production and flavor == 'preprod'))
+
+          target_path = 'android/app/google-services.json'
+          marker_file = os.path.join(runner_temp, '.firebase_injected')
 
           if is_preprod:
               firebase_status = 'WARNING_NOT_APPLICABLE'
               status_reason = 'Preproduction environment intentionally excludes Firebase Cloud Messaging.'
+          elif os.path.isfile(target_path):
+              # Workspace configuration pre-exists: validate in place and strictly preserve.
+              # Never overwrite a pre-existing configuration, even when secret is provided.
+              try:
+                  with open(target_path, 'rb') as f:
+                      raw = f.read()
+                  data = json.loads(raw.decode('utf-8'))
+                  proj_id = data.get('project_info', {}).get('project_id', '').strip()
+                  clients = data.get('client', [])
+                  pkgs = [
+                      c.get('client_info', {}).get('android_client_info', {}).get('package_name', '').strip()
+                      for c in clients if isinstance(c, dict)
+                  ]
+                  if proj_id == 'acya-fcm-prod-dispatcher' and 'com.acya.woodapp' in pkgs:
+                      firebase_status = 'READY'
+                      status_reason = 'Valid pre-existing workspace google-services.json found.'
+                      is_ready = True
+                  elif proj_id != 'acya-fcm-prod-dispatcher':
+                      firebase_status = 'WARNING_PROJECT_MISMATCH'
+                      status_reason = f"Pre-existing configuration targets project '{proj_id}' instead of 'acya-fcm-prod-dispatcher'."
+                  else:
+                      firebase_status = 'WARNING_PACKAGE_MISMATCH'
+                      status_reason = f"Pre-existing configuration packages '{pkgs}' do not include 'com.acya.woodapp'."
+              except Exception as e:
+                  firebase_status = 'WARNING_INVALID_JSON'
+                  status_reason = f"Pre-existing google-services.json is invalid: {type(e).__name__}"
           elif not b64_content:
-              if os.path.isfile('android/app/google-services.json'):
-                  try:
-                      with open('android/app/google-services.json', 'rb') as f:
-                          raw = f.read()
-                      data = json.loads(raw.decode('utf-8'))
-                      proj_id = data.get('project_info', {}).get('project_id', '').strip()
-                      clients = data.get('client', [])
-                      pkgs = [c.get('client_info', {}).get('android_client_info', {}).get('package_name', '').strip() for c in clients]
-                      if proj_id == 'acya-fcm-prod-dispatcher' and 'com.acya.woodapp' in pkgs:
-                          firebase_status = 'READY'
-                          status_reason = 'Valid pre-existing workspace google-services.json found.'
-                          is_ready = True
-                      elif proj_id != 'acya-fcm-prod-dispatcher':
-                          firebase_status = 'WARNING_PROJECT_MISMATCH'
-                          status_reason = f"Pre-existing configuration targets project '{proj_id}' instead of 'acya-fcm-prod-dispatcher'."
-                      else:
-                          firebase_status = 'WARNING_PACKAGE_MISMATCH'
-                          status_reason = f"Pre-existing configuration packages '{pkgs}' do not include 'com.acya.woodapp'."
-                  except Exception as e:
-                      firebase_status = 'WARNING_INVALID_JSON'
-                      status_reason = f"Pre-existing google-services.json is invalid: {type(e).__name__}"
-              else:
-                  firebase_status = 'WARNING_MISSING_CONFIG'
-                  status_reason = 'Secret FIREBASE_GOOGLE_SERVICES_BASE64 is not configured and android/app/google-services.json is absent.'
+              firebase_status = 'WARNING_MISSING_CONFIG'
+              status_reason = 'Secret FIREBASE_GOOGLE_SERVICES_BASE64 is not configured and android/app/google-services.json is absent.'
           else:
               try:
                   decoded_bytes = base64.b64decode(b64_content)
               except Exception as e:
                   decoded_bytes = None
-                  firebase_status = 'WARNING_INVALID_JSON'
+                  firebase_status = 'WARNING_INVALID_BASE64'
                   status_reason = f"Failed to base64-decode secret: {type(e).__name__}"
 
               if decoded_bytes is not None:
@@ -364,7 +374,10 @@ jobs:
                       data = json.loads(decoded_bytes.decode('utf-8'))
                       proj_id = data.get('project_info', {}).get('project_id', '').strip()
                       clients = data.get('client', [])
-                      pkgs = [c.get('client_info', {}).get('android_client_info', {}).get('package_name', '').strip() for c in clients]
+                      pkgs = [
+                          c.get('client_info', {}).get('android_client_info', {}).get('package_name', '').strip()
+                          for c in clients if isinstance(c, dict)
+                      ]
 
                       if proj_id != 'acya-fcm-prod-dispatcher':
                           firebase_status = 'WARNING_PROJECT_MISMATCH'
@@ -374,16 +387,12 @@ jobs:
                           status_reason = f"Firebase packages '{pkgs}' do not contain required 'com.acya.woodapp'."
                       else:
                           os.makedirs('android/app', exist_ok=True)
-                          target_path = 'android/app/google-services.json'
-                          pre_existed = os.path.isfile(target_path)
-
                           with open(target_path, 'wb') as f:
                               f.write(decoded_bytes)
 
-                          if not pre_existed:
-                              marker_file = os.path.join(runner_temp, '.firebase_injected')
-                              with open(marker_file, 'w') as f:
-                                  f.write('injected')
+                          # Mark for cleanup only because the workflow injected this file
+                          with open(marker_file, 'w', encoding='utf-8') as f:
+                              f.write('injected')
 
                           firebase_status = 'READY'
                           status_reason = 'Production Firebase configuration validated and injected successfully.'
@@ -401,19 +410,25 @@ jobs:
               with open(github_env, 'a', encoding='utf-8') as f:
                   f.write(f"FIREBASE_STATUS={firebase_status}\n")
 
-          if is_ready:
-              print(f"::notice title=Firebase Configuration Status::FIREBASE_STATUS=READY — {status_reason}")
-          else:
-              print(f"::warning title=Firebase Configuration Status::FIREBASE_STATUS={firebase_status} — {status_reason} Compilation will proceed, but FCM push notifications will be disabled.")
-
           if github_step_summary and os.path.isfile(github_step_summary):
               with open(github_step_summary, 'a', encoding='utf-8') as f:
                   f.write(f"\n### Firebase FCM Configuration\n")
                   f.write(f"- **Status:** `{firebase_status}`\n")
                   f.write(f"- **Details:** {status_reason}\n")
-                  f.write(f"- **FCM Operational:** {'Yes (Ready)' if is_ready else 'No (FCM Inactive on this APK)'}\n")
+                  f.write(f"- **Static Validation:** {'Passed (Configuration Present)' if is_ready else 'Failed / Inactive'}\n")
                   if not is_ready:
-                      f.write(f"> ⚠️ **Notice:** This APK was built with core ERP modules functional. However, Firebase Cloud Messaging push alerts will not be delivered to devices running this artifact.\n")
+                      if is_production:
+                          f.write(f"> ❌ **Fatal Error:** Production build halted before compilation because Firebase configuration is missing or invalid (`FIREBASE_STATUS={firebase_status}`).\n")
+                      else:
+                          f.write(f"> ⚠️ **Notice:** This APK was built with core ERP modules functional. However, Firebase Cloud Messaging push alerts will not be delivered to devices running this artifact.\n")
+
+          if is_ready:
+              print(f"::notice title=Firebase Configuration Status::FIREBASE_STATUS=READY — {status_reason}")
+          elif not is_production:
+              print(f"::warning title=Firebase Configuration Status::FIREBASE_STATUS={firebase_status} — {status_reason} Compilation will proceed, but FCM push notifications will be disabled.")
+          else:
+              print(f"::error title=Firebase Production Validation Failed::Production build aborted before compilation. Required FIREBASE_STATUS=READY, got '{firebase_status}' ({status_reason}).")
+              sys.exit(1)
 
           print(f"Firebase configuration handling complete. Status: {firebase_status}")
           EOF
@@ -693,8 +708,18 @@ jobs:
       - name: Cleanup Secrets & Sensitive Artifacts
         if: always()
         run: |
-          echo "Cleaning up temporary runner files..."
-          rm -f "$RUNNER_TEMP/release.jks" "$RUNNER_TEMP"/*.json "$RUNNER_TEMP"/*.apk || true
+          echo "Cleaning up temporary runner files created by this workflow..."
+          rm -f "$RUNNER_TEMP/release.jks" \
+                "$RUNNER_TEMP/tenant_config.json" \
+                "$RUNNER_TEMP/build_metadata.json" \
+                "$RUNNER_TEMP/upload_response.json" || true
+
+          STAGED_APK="${{ steps.artifact-prep.outputs.apk_path }}"
+          if [ -n "$STAGED_APK" ] && [ -f "$STAGED_APK" ]; then
+            echo "Removing staged release APK..."
+            rm -f "$STAGED_APK" || true
+          fi
+
           if [ -f "$RUNNER_TEMP/.firebase_injected" ]; then
             echo "Removing CI-injected Firebase configuration..."
             rm -f android/app/google-services.json "$RUNNER_TEMP/.firebase_injected" || true
