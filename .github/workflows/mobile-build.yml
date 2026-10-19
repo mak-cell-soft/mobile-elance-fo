@@ -117,6 +117,8 @@ jobs:
 
       - name: Validate Tenant Configuration Data
         id: validate-config
+        env:
+          API_ENVIRONMENT: ${{ inputs.apiEnvironment }}
         run: |
           python3 - << 'EOF'
           import json, re, sys, os
@@ -132,7 +134,6 @@ jobs:
 
           tenant_id = config.get('tenantId', '').strip()
           app_name = config.get('appName', '').strip()
-          package_name = config.get('packageName', '').strip()
           primary_color = config.get('primaryColor', '').strip()
           secondary_color = config.get('secondaryColor', '').strip()
           base_url = config.get('baseUrl', '').strip()
@@ -156,8 +157,20 @@ jobs:
           if not app_name:
               app_name = tenant_id
 
-          if not package_name:
-              package_name = f"com.{tenant_id.replace('-', '')}.woodapp"
+          # Shared production package ID enforcement matching build_tenant.ps1:
+          # All production tenant builds strictly use com.acya.woodapp.
+          # Development builds use com.example.woodapp.
+          # Legacy packageName in tenant configuration cannot override the production package.
+          api_environment = os.environ.get('API_ENVIRONMENT', 'production').strip().lower()
+          is_development = (flavor_name == 'development' or api_environment == 'development')
+
+          if is_development:
+              package_name = 'com.example.woodapp'
+          else:
+              raw_package_name = config.get('packageName', '').strip()
+              if raw_package_name and raw_package_name != 'com.acya.woodapp':
+                  print(f"::notice::Overriding legacy packageName '{raw_package_name}' with shared production package 'com.acya.woodapp'.")
+              package_name = 'com.acya.woodapp'
 
           # 2. Validate packageName (Android applicationId pattern)
           if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$', package_name):
@@ -287,6 +300,124 @@ jobs:
           echo "KEY_ALIAS=$KEY_ALIAS_SECRET" >> $GITHUB_ENV
           echo "KEY_PASSWORD=$KEY_PASS" >> $GITHUB_ENV
 
+      - name: Configure and Validate Firebase Integration
+        id: firebase-setup
+        env:
+          FIREBASE_BASE64: ${{ secrets.FIREBASE_GOOGLE_SERVICES_BASE64 }}
+          API_ENVIRONMENT: ${{ inputs.apiEnvironment }}
+          FLAVOR_NAME: ${{ steps.validate-config.outputs.flavor_name }}
+        run: |
+          python3 - << 'EOF'
+          import json, os, sys, base64
+
+          api_env = os.environ.get('API_ENVIRONMENT', 'production').strip().lower()
+          flavor = os.environ.get('FLAVOR_NAME', '').strip().lower()
+          b64_content = os.environ.get('FIREBASE_BASE64', '').strip()
+          runner_temp = os.environ.get('RUNNER_TEMP', '/tmp')
+          github_step_summary = os.environ.get('GITHUB_STEP_SUMMARY')
+          github_output = os.environ.get('GITHUB_OUTPUT')
+          github_env = os.environ.get('GITHUB_ENV')
+
+          firebase_status = 'WARNING_MISSING_CONFIG'
+          status_reason = 'Secret FIREBASE_GOOGLE_SERVICES_BASE64 is empty or not set.'
+          is_ready = False
+          is_preprod = (api_env == 'preprod' or flavor == 'preprod')
+
+          if is_preprod:
+              firebase_status = 'WARNING_NOT_APPLICABLE'
+              status_reason = 'Preproduction environment intentionally excludes Firebase Cloud Messaging.'
+          elif not b64_content:
+              if os.path.isfile('android/app/google-services.json'):
+                  try:
+                      with open('android/app/google-services.json', 'rb') as f:
+                          raw = f.read()
+                      data = json.loads(raw.decode('utf-8'))
+                      proj_id = data.get('project_info', {}).get('project_id', '').strip()
+                      clients = data.get('client', [])
+                      pkgs = [c.get('client_info', {}).get('android_client_info', {}).get('package_name', '').strip() for c in clients]
+                      if proj_id == 'acya-fcm-prod-dispatcher' and 'com.acya.woodapp' in pkgs:
+                          firebase_status = 'READY'
+                          status_reason = 'Valid pre-existing workspace google-services.json found.'
+                          is_ready = True
+                      elif proj_id != 'acya-fcm-prod-dispatcher':
+                          firebase_status = 'WARNING_PROJECT_MISMATCH'
+                          status_reason = f"Pre-existing configuration targets project '{proj_id}' instead of 'acya-fcm-prod-dispatcher'."
+                      else:
+                          firebase_status = 'WARNING_PACKAGE_MISMATCH'
+                          status_reason = f"Pre-existing configuration packages '{pkgs}' do not include 'com.acya.woodapp'."
+                  except Exception as e:
+                      firebase_status = 'WARNING_INVALID_JSON'
+                      status_reason = f"Pre-existing google-services.json is invalid: {type(e).__name__}"
+              else:
+                  firebase_status = 'WARNING_MISSING_CONFIG'
+                  status_reason = 'Secret FIREBASE_GOOGLE_SERVICES_BASE64 is not configured and android/app/google-services.json is absent.'
+          else:
+              try:
+                  decoded_bytes = base64.b64decode(b64_content)
+              except Exception as e:
+                  decoded_bytes = None
+                  firebase_status = 'WARNING_INVALID_JSON'
+                  status_reason = f"Failed to base64-decode secret: {type(e).__name__}"
+
+              if decoded_bytes is not None:
+                  try:
+                      data = json.loads(decoded_bytes.decode('utf-8'))
+                      proj_id = data.get('project_info', {}).get('project_id', '').strip()
+                      clients = data.get('client', [])
+                      pkgs = [c.get('client_info', {}).get('android_client_info', {}).get('package_name', '').strip() for c in clients]
+
+                      if proj_id != 'acya-fcm-prod-dispatcher':
+                          firebase_status = 'WARNING_PROJECT_MISMATCH'
+                          status_reason = f"Firebase project ID is '{proj_id}', expected 'acya-fcm-prod-dispatcher'."
+                      elif 'com.acya.woodapp' not in pkgs:
+                          firebase_status = 'WARNING_PACKAGE_MISMATCH'
+                          status_reason = f"Firebase packages '{pkgs}' do not contain required 'com.acya.woodapp'."
+                      else:
+                          os.makedirs('android/app', exist_ok=True)
+                          target_path = 'android/app/google-services.json'
+                          pre_existed = os.path.isfile(target_path)
+
+                          with open(target_path, 'wb') as f:
+                              f.write(decoded_bytes)
+
+                          if not pre_existed:
+                              marker_file = os.path.join(runner_temp, '.firebase_injected')
+                              with open(marker_file, 'w') as f:
+                                  f.write('injected')
+
+                          firebase_status = 'READY'
+                          status_reason = 'Production Firebase configuration validated and injected successfully.'
+                          is_ready = True
+                  except Exception as e:
+                      firebase_status = 'WARNING_INVALID_JSON'
+                      status_reason = f"Failed to parse Firebase configuration JSON: {type(e).__name__}"
+
+          if github_output and os.path.isfile(github_output):
+              with open(github_output, 'a', encoding='utf-8') as f:
+                  f.write(f"firebase_status={firebase_status}\n")
+                  f.write(f"is_ready={'true' if is_ready else 'false'}\n")
+
+          if github_env and os.path.isfile(github_env):
+              with open(github_env, 'a', encoding='utf-8') as f:
+                  f.write(f"FIREBASE_STATUS={firebase_status}\n")
+
+          if is_ready:
+              print(f"::notice title=Firebase Configuration Status::FIREBASE_STATUS=READY — {status_reason}")
+          else:
+              print(f"::warning title=Firebase Configuration Status::FIREBASE_STATUS={firebase_status} — {status_reason} Compilation will proceed, but FCM push notifications will be disabled.")
+
+          if github_step_summary and os.path.isfile(github_step_summary):
+              with open(github_step_summary, 'a', encoding='utf-8') as f:
+                  f.write(f"\n### Firebase FCM Configuration\n")
+                  f.write(f"- **Status:** `{firebase_status}`\n")
+                  f.write(f"- **Details:** {status_reason}\n")
+                  f.write(f"- **FCM Operational:** {'Yes (Ready)' if is_ready else 'No (FCM Inactive on this APK)'}\n")
+                  if not is_ready:
+                      f.write(f"> ⚠️ **Notice:** This APK was built with core ERP modules functional. However, Firebase Cloud Messaging push alerts will not be delivered to devices running this artifact.\n")
+
+          print(f"Firebase configuration handling complete. Status: {firebase_status}")
+          EOF
+
       - name: Restore Flutter Dependencies
         run: flutter pub get
 
@@ -374,19 +505,20 @@ jobs:
             fi
             echo "✓ Verified: APK is not debuggable (release build confirmed)."
 
-            # 3. Verify package identity corresponds to requested tenant
+            # 3. Verify package identity corresponds to expected package
             ACTUAL_PACKAGE=$(echo "$BADGING_OUTPUT" | grep -o "package: name='[^']*'" | head -n 1 | cut -d"'" -f2)
-            if [ -n "$ACTUAL_PACKAGE" ] && [ "$ACTUAL_PACKAGE" != "$PACKAGE_NAME" ]; then
+            if [ -z "$ACTUAL_PACKAGE" ]; then
+              echo "::error::APK package verification failed: could not extract package name from aapt dump badging."
+              exit 1
+            fi
+            if [ "$ACTUAL_PACKAGE" != "$PACKAGE_NAME" ]; then
               echo "::error::APK package mismatch: expected '$PACKAGE_NAME', found '$ACTUAL_PACKAGE'"
               exit 1
             fi
-            echo "✓ Verified: APK package name matches requested tenant package ($PACKAGE_NAME)."
+            echo "✓ Verified: APK package name matches expected package ($PACKAGE_NAME)."
           else
-            echo "::warning::aapt tool not found in runner PATH. Inspecting archive structure..."
-            unzip -l "$SOURCE_APK" AndroidManifest.xml classes.dex > /dev/null 2>&1 || {
-              echo "::error::APK is corrupt: missing AndroidManifest.xml or classes.dex"
-              exit 1
-            }
+            echo "::error::aapt tool was not found in Android SDK. Cannot verify APK package identity."
+            exit 1
           fi
 
           # 4. Verify artifact is signed with the configured production release key
@@ -563,3 +695,7 @@ jobs:
         run: |
           echo "Cleaning up temporary runner files..."
           rm -f "$RUNNER_TEMP/release.jks" "$RUNNER_TEMP"/*.json "$RUNNER_TEMP"/*.apk || true
+          if [ -f "$RUNNER_TEMP/.firebase_injected" ]; then
+            echo "Removing CI-injected Firebase configuration..."
+            rm -f android/app/google-services.json "$RUNNER_TEMP/.firebase_injected" || true
+          fi
