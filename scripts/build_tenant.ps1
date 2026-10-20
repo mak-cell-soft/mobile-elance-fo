@@ -145,13 +145,16 @@ try {
 # -----------------------------------------------------------------------------
 if (-not $AppName) { $AppName = $TenantId }
 
-# Shared production package ID migration: enforce com.acya.woodapp for all production tenants
+# Derive tenant-specific package ID to allow multi-tenant coexistence and maintain update continuity
 $isDevelopment = ($flavorName -eq "development" -or $Target -like "*development*")
 if ($isDevelopment) {
     if (-not $PackageName) { $PackageName = "com.example.woodapp" }
 } else {
-    # Production builds strictly enforce com.acya.woodapp; tenant config or CLI arguments cannot override it
-    $PackageName = "com.acya.woodapp"
+    if (-not $PackageName -and $json.packageName) { $PackageName = $json.packageName }
+    if (-not $PackageName) {
+        $alphanumericSlug = ($TenantId -replace '[^a-zA-Z0-9]', '').ToLower()
+        $PackageName = "com.$alphanumericSlug.woodapp"
+    }
 }
 if (-not $PrimaryColor) { $PrimaryColor = "#1B4332" }
 if (-not $SecondaryColor) { $SecondaryColor = "#2D6A4F" }
@@ -174,8 +177,8 @@ if (-not $appNameSafe) {
 }
 $canonicalApkName = "$appNameSafe-$versionName-$buildNumber.apk"
 
-# Expected package ID for post-build verification (strictly derived from build environment)
-$expectedPackageId = if ($isDevelopment) { "com.example.woodapp" } else { "com.acya.woodapp" }
+# Expected package ID for post-build verification (strictly derived from tenant configuration)
+$expectedPackageId = $PackageName
 
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host "Building Multi-Tenant App: $AppName ($TenantId)" -ForegroundColor Green

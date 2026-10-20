@@ -157,10 +157,10 @@ jobs:
           if not app_name:
               app_name = tenant_id
 
-          # Shared production package ID enforcement matching build_tenant.ps1:
-          # All production tenant builds strictly use com.acya.woodapp.
-          # Development builds use com.example.woodapp.
-          # Legacy packageName in tenant configuration cannot override the production package.
+          # Tenant-specific package ID derivation:
+          # Development builds strictly use com.example.woodapp.
+          # Production tenant builds derive expected package ID from authoritative
+          # tenant configuration (packageName) or deterministic tenant-ID normalization.
           api_environment = os.environ.get('API_ENVIRONMENT', 'production').strip().lower()
           is_development = (flavor_name == 'development' or api_environment == 'development')
 
@@ -168,9 +168,14 @@ jobs:
               package_name = 'com.example.woodapp'
           else:
               raw_package_name = config.get('packageName', '').strip()
-              if raw_package_name and raw_package_name != 'com.acya.woodapp':
-                  print(f"::notice::Overriding legacy packageName '{raw_package_name}' with shared production package 'com.acya.woodapp'.")
-              package_name = 'com.acya.woodapp'
+              if raw_package_name:
+                  package_name = raw_package_name
+              else:
+                  clean_slug = re.sub(r'[^a-zA-Z0-9]', '', tenant_id).lower()
+                  if not clean_slug:
+                      print(f"::error::Invalid tenantId '{tenant_id}': cannot derive valid Android package name.")
+                      sys.exit(1)
+                  package_name = f"com.{clean_slug}.woodapp"
 
           # 2. Validate packageName (Android applicationId pattern)
           if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$', package_name):

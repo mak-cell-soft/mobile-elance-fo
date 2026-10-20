@@ -14,11 +14,11 @@ class TenantBuildConfig {
   );
   static const String appName = String.fromEnvironment(
     'APP_NAME',
-    defaultValue: 'socofeb',
+    defaultValue: 'SOCOFEB',
   );
   static const String packageName = String.fromEnvironment(
     'PACKAGE_NAME',
-    defaultValue: 'com.acya.woodapp',
+    defaultValue: 'com.socofeb.woodapp',
   );
   static const String primaryColor = String.fromEnvironment(
     'PRIMARY_COLOR',

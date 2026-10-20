@@ -63,19 +63,20 @@ android {
         }
         create("socofeb") {
             dimension = "tenant"
-            applicationId = if (!customAppId.isNullOrBlank() && (customFlavor == "socofeb" || customFlavor.isNullOrBlank())) customAppId else "com.acya.woodapp"
-            resValue("string", "app_name", if (!customAppName.isNullOrBlank() && (customFlavor == "socofeb" || customFlavor.isNullOrBlank())) customAppName else "socofeb")
+            applicationId = if (!customAppId.isNullOrBlank() && (customFlavor == "socofeb" || customFlavor.isNullOrBlank())) customAppId else "com.socofeb.woodapp"
+            resValue("string", "app_name", if (!customAppName.isNullOrBlank() && (customFlavor == "socofeb" || customFlavor.isNullOrBlank())) customAppName else "SOCOFEB")
         }
         create("mansour_construction") {
             dimension = "tenant"
-            applicationId = if (!customAppId.isNullOrBlank() && customFlavor == "mansour_construction") customAppId else "com.acya.woodapp"
+            applicationId = if (!customAppId.isNullOrBlank() && customFlavor == "mansour_construction") customAppId else "com.mansourconstruction.woodapp"
             resValue("string", "app_name", if (!customAppName.isNullOrBlank() && customFlavor == "mansour_construction") customAppName else "Mansour Construction")
         }
 
         if (!customFlavor.isNullOrBlank() && customFlavor != "development" && customFlavor != "socofeb" && customFlavor != "mansour_construction") {
             create(customFlavor) {
                 dimension = "tenant"
-                applicationId = customAppId ?: "com.acya.woodapp"
+                val defaultDynamicPkg = "com.${customFlavor.replace("-", "").replace("_", "")}.woodapp"
+                applicationId = customAppId ?: defaultDynamicPkg
                 resValue("string", "app_name", customAppName ?: customFlavor)
             }
         }

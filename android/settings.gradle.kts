@@ -25,4 +25,5 @@ plugins {
 }
 
 
+rootProject.name = "acya_mobile"
 include(":app")
