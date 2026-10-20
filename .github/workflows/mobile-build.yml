@@ -311,6 +311,7 @@ jobs:
           FIREBASE_BASE64: ${{ secrets.FIREBASE_GOOGLE_SERVICES_BASE64 }}
           API_ENVIRONMENT: ${{ inputs.apiEnvironment }}
           FLAVOR_NAME: ${{ steps.validate-config.outputs.flavor_name }}
+          PACKAGE_NAME: ${{ steps.validate-config.outputs.package_name }}
         run: |
           python3 - << 'EOF'
           import json, os, sys, base64
@@ -319,6 +320,7 @@ jobs:
           if not api_env:
               api_env = 'production'
           flavor = os.environ.get('FLAVOR_NAME', '').strip().lower()
+          target_pkg = os.environ.get('PACKAGE_NAME', '').strip()
           b64_content = os.environ.get('FIREBASE_BASE64', '').strip()
           runner_temp = os.environ.get('RUNNER_TEMP', '/tmp')
           github_step_summary = os.environ.get('GITHUB_STEP_SUMMARY')
@@ -328,15 +330,22 @@ jobs:
           firebase_status = 'WARNING_MISSING_CONFIG'
           status_reason = 'Secret FIREBASE_GOOGLE_SERVICES_BASE64 is empty or not set.'
           is_ready = False
-          is_production = (api_env == 'production')
-          is_preprod = (api_env == 'preprod' or (not is_production and flavor == 'preprod'))
+          is_development = (flavor == 'development' or api_env == 'development')
+          is_production = (api_env == 'production' and not is_development)
+          is_preprod = (api_env == 'preprod' or (not is_production and not is_development and flavor == 'preprod'))
 
           target_path = 'android/app/google-services.json'
           marker_file = os.path.join(runner_temp, '.firebase_injected')
 
-          if is_preprod:
+          if is_development:
+              firebase_status = 'WARNING_NOT_APPLICABLE'
+              status_reason = 'Development environment uses isolated development Firebase configuration.'
+          elif is_preprod:
               firebase_status = 'WARNING_NOT_APPLICABLE'
               status_reason = 'Preproduction environment intentionally excludes Firebase Cloud Messaging.'
+          elif not target_pkg:
+              firebase_status = 'WARNING_PACKAGE_MISMATCH'
+              status_reason = 'Target package name is empty; cannot validate Firebase client.'
           elif os.path.isfile(target_path):
               # Workspace configuration pre-exists: validate in place and strictly preserve.
               # Never overwrite a pre-existing configuration, even when secret is provided.
@@ -350,16 +359,16 @@ jobs:
                       c.get('client_info', {}).get('android_client_info', {}).get('package_name', '').strip()
                       for c in clients if isinstance(c, dict)
                   ]
-                  if proj_id == 'acya-fcm-prod-dispatcher' and 'com.acya.woodapp' in pkgs:
+                  if proj_id == 'acya-fcm-prod-dispatcher' and target_pkg in pkgs:
                       firebase_status = 'READY'
-                      status_reason = 'Valid pre-existing workspace google-services.json found.'
+                      status_reason = f"Valid pre-existing workspace google-services.json found with client '{target_pkg}'."
                       is_ready = True
                   elif proj_id != 'acya-fcm-prod-dispatcher':
                       firebase_status = 'WARNING_PROJECT_MISMATCH'
                       status_reason = f"Pre-existing configuration targets project '{proj_id}' instead of 'acya-fcm-prod-dispatcher'."
                   else:
                       firebase_status = 'WARNING_PACKAGE_MISMATCH'
-                      status_reason = f"Pre-existing configuration packages '{pkgs}' do not include 'com.acya.woodapp'."
+                      status_reason = f"Pre-existing configuration packages '{pkgs}' do not include required client '{target_pkg}'."
               except Exception as e:
                   firebase_status = 'WARNING_INVALID_JSON'
                   status_reason = f"Pre-existing google-services.json is invalid: {type(e).__name__}"
@@ -387,9 +396,9 @@ jobs:
                       if proj_id != 'acya-fcm-prod-dispatcher':
                           firebase_status = 'WARNING_PROJECT_MISMATCH'
                           status_reason = f"Firebase project ID is '{proj_id}', expected 'acya-fcm-prod-dispatcher'."
-                      elif 'com.acya.woodapp' not in pkgs:
+                      elif target_pkg not in pkgs:
                           firebase_status = 'WARNING_PACKAGE_MISMATCH'
-                          status_reason = f"Firebase packages '{pkgs}' do not contain required 'com.acya.woodapp'."
+                          status_reason = f"Firebase packages '{pkgs}' do not contain required client '{target_pkg}'."
                       else:
                           os.makedirs('android/app', exist_ok=True)
                           with open(target_path, 'wb') as f:
@@ -400,7 +409,7 @@ jobs:
                               f.write('injected')
 
                           firebase_status = 'READY'
-                          status_reason = 'Production Firebase configuration validated and injected successfully.'
+                          status_reason = f"Production Firebase configuration validated and injected successfully for '{target_pkg}'."
                           is_ready = True
                   except Exception as e:
                       firebase_status = 'WARNING_INVALID_JSON'
