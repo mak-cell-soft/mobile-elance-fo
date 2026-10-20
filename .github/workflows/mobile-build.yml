@@ -137,7 +137,29 @@ jobs:
           primary_color = config.get('primaryColor', '').strip()
           secondary_color = config.get('secondaryColor', '').strip()
           base_url = config.get('baseUrl', '').strip()
-          has_chantier = str(config.get('hasChantierModule', True)).lower()
+          # Module flag extraction helpers
+          def parse_bool_flag(val, default_val=False):
+              if val is None:
+                  return default_val
+              if isinstance(val, bool):
+                  return val
+              s = str(val).strip().lower()
+              if s in ('true', '1', 'yes'):
+                  return True
+              if s in ('false', '0', 'no'):
+                  return False
+              return default_val
+
+          raw_chantier = config.get('hasChantierModule')
+          if raw_chantier is None:
+              raw_chantier = config.get('hasChantiers', config.get('isManagingConstructions', config.get('ismanagingconstructions')))
+          has_chantier = str(parse_bool_flag(raw_chantier, default_val=True)).lower()
+
+          raw_production = config.get('hasProductionModule')
+          if raw_production is None:
+              raw_production = config.get('hasProduction', config.get('isManagingProduction', config.get('ismanagingproduction')))
+          # Do not silently default missing authoritative production module configuration to enabled
+          has_production = str(parse_bool_flag(raw_production, default_val=False)).lower()
 
           version = build.get('version', '').strip()
           build_number = str(build.get('buildNumber', 1))
@@ -222,6 +244,7 @@ jobs:
               out.write(f"secondary_color={secondary_color}\n")
               out.write(f"base_url={base_url}\n")
               out.write(f"has_chantier={has_chantier}\n")
+              out.write(f"has_production={has_production}\n")
               out.write(f"flavor_name={flavor_name}\n")
               out.write(f"version={version}\n")
               out.write(f"build_number={build_number}\n")
@@ -464,6 +487,7 @@ jobs:
           SECONDARY_COLOR="${{ steps.validate-config.outputs.secondary_color }}"
           BASE_URL="${{ steps.validate-config.outputs.base_url }}"
           HAS_CHANTIER="${{ steps.validate-config.outputs.has_chantier }}"
+          HAS_PRODUCTION="${{ steps.validate-config.outputs.has_production }}"
           VERSION="${{ steps.validate-config.outputs.version }}"
           BUILD_NUMBER="${{ steps.validate-config.outputs.build_number }}"
 
@@ -483,7 +507,8 @@ jobs:
             --dart-define=SECONDARY_COLOR="$SECONDARY_COLOR" \
             --dart-define=BASE_URL="$BASE_URL" \
             --dart-define=ASSETS_PATH="assets/tenants/$TENANT_ID/" \
-            --dart-define=HAS_CHANTIER_MODULE="$HAS_CHANTIER"
+            --dart-define=HAS_CHANTIER_MODULE="$HAS_CHANTIER" \
+            --dart-define=HAS_PRODUCTION_MODULE="$HAS_PRODUCTION"
 
       - name: Package Artifact & Compute Checksum
         id: artifact-prep

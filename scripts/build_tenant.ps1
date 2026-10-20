@@ -12,7 +12,8 @@ param (
     [string]$BaseUrl = "https://acya.site/api/",
     [string]$Target = "lib/main_preprod.dart",
     [string]$BuildMode = "apk",
-    [bool]$HasChantierModule = $true
+    [bool]$HasChantierModule = $true,
+    [Nullable[bool]]$HasProductionModule = $null
 )
 
 # -----------------------------------------------------------------------------
@@ -131,7 +132,26 @@ try {
     if (-not $AppName -and $json.appName) { $AppName = $json.appName }
     if (-not $PrimaryColor -and $json.primaryColor) { $PrimaryColor = $json.primaryColor }
     if (-not $SecondaryColor -and $json.secondaryColor) { $SecondaryColor = $json.secondaryColor }
-    if ($json.hasChantierModule -ne $null) { $HasChantierModule = [bool]$json.hasChantierModule }
+    if ($json.hasChantierModule -ne $null) {
+        $HasChantierModule = [bool]$json.hasChantierModule
+    } elseif ($json.hasChantiers -ne $null) {
+        $HasChantierModule = [bool]$json.hasChantiers
+    } elseif ($json.isManagingConstructions -ne $null) {
+        $HasChantierModule = [bool]$json.isManagingConstructions
+    }
+
+    if ($HasProductionModule -eq $null) {
+        if ($json.hasProductionModule -ne $null) {
+            $HasProductionModule = [bool]$json.hasProductionModule
+        } elseif ($json.hasProduction -ne $null) {
+            $HasProductionModule = [bool]$json.hasProduction
+        } elseif ($json.isManagingProduction -ne $null) {
+            $HasProductionModule = [bool]$json.isManagingProduction
+        } else {
+            # Do not silently default missing authoritative production configuration to enabled
+            $HasProductionModule = $false
+        }
+    }
     if ($json.environment -eq "production" -and $Target -eq "lib/main_preprod.dart") {
         $Target = "lib/main_production.dart"
     }
@@ -189,6 +209,7 @@ Write-Host "Version:            $versionName+$buildNumber" -ForegroundColor Yell
 Write-Host "Artifact Target:    $canonicalApkName" -ForegroundColor Yellow
 Write-Host "Primary Color:      $PrimaryColor" -ForegroundColor Yellow
 Write-Host "Chantier Module:    $HasChantierModule" -ForegroundColor Yellow
+Write-Host "Production Module:  $HasProductionModule" -ForegroundColor Yellow
 Write-Host "==========================================" -ForegroundColor Green
 
 # -----------------------------------------------------------------------------
@@ -246,7 +267,8 @@ try {
         --dart-define=SECONDARY_COLOR=$SecondaryColor `
         --dart-define=BASE_URL=$BaseUrl `
         --dart-define=ASSETS_PATH="assets/tenants/$TenantId/" `
-        --dart-define=HAS_CHANTIER_MODULE=$HasChantierModule
+        --dart-define=HAS_CHANTIER_MODULE=$HasChantierModule `
+        --dart-define=HAS_PRODUCTION_MODULE=$HasProductionModule
 
     $buildSuccess = ($LASTEXITCODE -eq 0)
 } finally {

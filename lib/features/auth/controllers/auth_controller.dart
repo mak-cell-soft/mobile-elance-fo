@@ -79,6 +79,8 @@ class AuthController extends GetxController {
           status: remote.status ?? current?.status,
           hasChantierModule: remote.hasChantierModule,
           isManagingConstructions: remote.isManagingConstructions,
+          hasProductionModule: remote.hasProductionModule,
+          isManagingProduction: remote.isManagingProduction,
         );
 
         tenantConfig.value = merged;
