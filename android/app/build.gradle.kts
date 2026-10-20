@@ -25,12 +25,54 @@ android {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
+    fun resolveAppName(fallback: String, targetFlavor: String? = null): String {
+        val propName = (project.findProperty("APP_NAME") as? String)
+        if (!propName.isNullOrBlank() && !propName.equals("Gradle", ignoreCase = true)) {
+            return propName
+        }
+        val envName = System.getenv("APP_NAME")
+        if (!envName.isNullOrBlank() && !envName.equals("Gradle", ignoreCase = true)) {
+            return envName
+        }
+        // Fall back to reading active tenant configuration if present
+        try {
+            val activeConfigFile = rootProject.file("../assets/tenant_config.json")
+            if (activeConfigFile.exists()) {
+                val content = activeConfigFile.readText()
+                val match = Regex("\"appName\"\\s*:\\s*\"([^\"]+)\"").find(content)
+                if (match != null && match.groupValues[1].isNotBlank()) {
+                    val tenantMatch = Regex("\"tenantId\"\\s*:\\s*\"([^\"]+)\"").find(content)
+                    val activeTenant = tenantMatch?.groupValues?.get(1)?.replace('-', '_')
+                    if (targetFlavor == null || activeTenant == null || activeTenant == targetFlavor) {
+                        return match.groupValues[1]
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Fall back to tenant-specific configuration in assets/tenants/<tenantId>/config.json
+        if (targetFlavor != null) {
+            try {
+                val tenantSlug = targetFlavor.replace('_', '-')
+                val tenantConfigFile = rootProject.file("../assets/tenants/$tenantSlug/config.json")
+                if (tenantConfigFile.exists()) {
+                    val content = tenantConfigFile.readText()
+                    val match = Regex("\"appName\"\\s*:\\s*\"([^\"]+)\"").find(content)
+                    if (match != null && match.groupValues[1].isNotBlank()) {
+                        return match.groupValues[1]
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        return fallback
+    }
+
     defaultConfig {
         val customAppId = (project.findProperty("APPLICATION_ID") as? String) ?: System.getenv("PACKAGE_NAME")
-        val customAppName = (project.findProperty("APP_NAME") as? String) ?: System.getenv("APP_NAME")
 
         applicationId = customAppId ?: "com.acya.woodapp"
-        resValue("string", "app_name", customAppName ?: "WoodApp")
+        resValue("string", "app_name", resolveAppName("WoodApp"))
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -53,7 +95,6 @@ android {
 
     val customFlavor = (project.findProperty("FLAVOR_NAME") as? String) ?: System.getenv("FLAVOR_NAME")
     val customAppId = (project.findProperty("APPLICATION_ID") as? String) ?: System.getenv("PACKAGE_NAME")
-    val customAppName = (project.findProperty("APP_NAME") as? String) ?: System.getenv("APP_NAME")
 
     productFlavors {
         create("development") {
@@ -64,12 +105,12 @@ android {
         create("socofeb") {
             dimension = "tenant"
             applicationId = if (!customAppId.isNullOrBlank() && (customFlavor == "socofeb" || customFlavor.isNullOrBlank())) customAppId else "com.socofeb.woodapp"
-            resValue("string", "app_name", if (!customAppName.isNullOrBlank() && (customFlavor == "socofeb" || customFlavor.isNullOrBlank())) customAppName else "SOCOFEB")
+            resValue("string", "app_name", resolveAppName("SOCOFEB", "socofeb"))
         }
         create("mansour_construction") {
             dimension = "tenant"
             applicationId = if (!customAppId.isNullOrBlank() && customFlavor == "mansour_construction") customAppId else "com.mansourconstruction.woodapp"
-            resValue("string", "app_name", if (!customAppName.isNullOrBlank() && customFlavor == "mansour_construction") customAppName else "Mansour Construction")
+            resValue("string", "app_name", resolveAppName("Mansour Construction", "mansour_construction"))
         }
 
         if (!customFlavor.isNullOrBlank() && customFlavor != "development" && customFlavor != "socofeb" && customFlavor != "mansour_construction") {
@@ -77,7 +118,7 @@ android {
                 dimension = "tenant"
                 val defaultDynamicPkg = "com.${customFlavor.replace("-", "").replace("_", "")}.woodapp"
                 applicationId = customAppId ?: defaultDynamicPkg
-                resValue("string", "app_name", customAppName ?: customFlavor)
+                resValue("string", "app_name", resolveAppName(customFlavor, customFlavor))
             }
         }
     }
