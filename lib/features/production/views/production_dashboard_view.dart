@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../core/utils/view_status.dart';
+import '../../../routes/app_routes.dart';
 import '../controllers/production_controller.dart';
 import '../models/production_order.dart';
 import '../widgets/production_order_card.dart';
@@ -40,6 +41,11 @@ class ProductionDashboardView extends GetView<ProductionController> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.badge_outlined),
+            tooltip: 'Personnel & Prestations',
+            onPressed: () => Get.toNamed(AppRoutes.productionPersonnel),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Actualiser',

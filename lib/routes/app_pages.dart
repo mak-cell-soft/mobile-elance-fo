@@ -18,6 +18,7 @@ import '../features/notifications/views/notifications_view.dart';
 import '../features/production/bindings/production_binding.dart';
 import '../features/production/views/production_dashboard_view.dart';
 import '../features/production/views/production_detail_view.dart';
+import '../features/production/views/production_personnel_view.dart';
 import '../features/purchases/bindings/receipts_binding.dart';
 import '../features/purchases/views/receipts_list_view.dart';
 import '../features/settings/bindings/settings_binding.dart';
@@ -96,6 +97,12 @@ abstract class AppPages {
     GetPage(
       name: AppRoutes.productionDetail,
       page: () => const ProductionDetailView(),
+      binding: ProductionBinding(),
+      middlewares: [ProductionGuardMiddleware()],
+    ),
+    GetPage(
+      name: AppRoutes.productionPersonnel,
+      page: () => const ProductionPersonnelView(),
       binding: ProductionBinding(),
       middlewares: [ProductionGuardMiddleware()],
     ),

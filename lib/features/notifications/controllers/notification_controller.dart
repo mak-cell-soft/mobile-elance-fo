@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../core/config/env.dart';
@@ -8,12 +9,13 @@ import '../../../routes/app_routes.dart';
 import '../models/app_notification.dart';
 import '../models/stock_alert.dart';
 import '../models/transfer_notification.dart';
+import '../models/transferred_article_item.dart';
 import '../services/fcm_service.dart';
 import '../services/notification_service.dart';
 
 /// GetX Controller managing notification state, unread counters, periodic polling,
 /// and instant in-app alerts for pending caisse cash requests and system events.
-class NotificationController extends GetxController {
+class NotificationController extends GetxController with WidgetsBindingObserver {
   final NotificationService _service;
   final bool _enablePolling;
 
@@ -30,14 +32,30 @@ class NotificationController extends GetxController {
   final transferNotifications = <TransferNotification>[].obs;
   final stockAlerts = <StockAlert>[].obs;
 
+  /// Cached transferred article lines per transfer ID to prevent duplicate requests or repeated fetches.
+  final transferDetails = <int, List<TransferredArticleItem>>{}.obs;
+
+  /// Loading state per transfer card expansion.
+  final loadingTransferDetails = <int, bool>{}.obs;
+
+  /// Error message per transfer card detail loading failure.
+  final errorTransferDetails = <int, String?>{}.obs;
+
+  /// Set of expanded transfer card IDs.
+  final expandedTransferIds = <int>{}.obs;
+
   Timer? _pollingTimer;
   final Set<int> _knownNotificationIds = {};
   bool _isFirstLoad = true;
 
-  // Concurrency and race condition guards
+  // Concurrency and race condition guards for system polling
   bool _isPolling = false;
   bool _hasPendingRefresh = false;
   int _pollSequence = 0;
+
+  // Concurrency guards for transfer notifications
+  bool _isRefreshingTransfers = false;
+  bool _hasPendingTransferRefresh = false;
 
   @visibleForTesting
   Function(AppNotification item)? onNotificationFeedbackForTesting;
@@ -55,6 +73,8 @@ class NotificationController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    // Register lifecycle observer to refresh state on app resume
+    WidgetsBinding.instance.addObserver(this);
     loadAll();
     if (_enablePolling) {
       _startPolling();
@@ -64,6 +84,7 @@ class NotificationController extends GetxController {
 
   @override
   void onClose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pollingTimer?.cancel();
     if (EnvConfig.supportsFcm) {
       if (FcmService.instance.onForegroundNotification != null) {
@@ -73,19 +94,103 @@ class NotificationController extends GetxController {
     super.onClose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // On app resume, refresh notification state if user is authenticated
+    if (state == AppLifecycleState.resumed && StorageService.instance.isLoggedIn) {
+      onAppResumed();
+    }
+  }
+
+  /// Refreshes relevant notification data when app resumes from background.
+  /// Guarded against redundant concurrent requests.
+  Future<void> onAppResumed() async {
+    await Future.wait([
+      pollForUpdates(),
+      refreshTransfers(),
+    ]);
+  }
+
+  /// Called whenever the notifications screen or its Transfers tab is opened or revisited.
+  /// Refreshes transfers and unread notifications without redundant concurrent calls.
+  Future<void> onScreenOpened() async {
+    await Future.wait([
+      refreshTransfers(),
+      pollForUpdates(),
+    ]);
+  }
+
+  /// Refreshes inter-site transfer notifications for the current authenticated user.
+  /// Uses existing GET /stock/notifications/missed endpoint.
+  /// Guarded against concurrent overlapping requests.
+  Future<void> refreshTransfers() async {
+    if (_isRefreshingTransfers) {
+      _hasPendingTransferRefresh = true;
+      return;
+    }
+
+    _isRefreshingTransfers = true;
+
+    try {
+      final userId = StorageService.instance.userId;
+      if (userId != null && userId > 0) {
+        final missed = await _service.getMissedNotifications(userId);
+        transferNotifications.assignAll(missed);
+      } else {
+        transferNotifications.clear();
+      }
+    } catch (e) {
+      debugPrint('[NotificationController] Failed to refresh transfers: $e');
+    } finally {
+      _isRefreshingTransfers = false;
+      if (_hasPendingTransferRefresh) {
+        _hasPendingTransferRefresh = false;
+        refreshTransfers();
+      }
+    }
+  }
+
   /// Automatically registers this controller as the foreground FCM listener if in a supported flavor.
   void _registerFcmForegroundHandler() {
     if (EnvConfig.supportsFcm) {
       FcmService.instance.onForegroundNotification = ({notificationId, rawMessage}) {
-        onForegroundMessage(notificationId: notificationId);
+        onForegroundMessage(notificationId: notificationId, rawMessage: rawMessage);
       };
     }
   }
 
   /// Handles a foreground notification event received via FCM.
   /// Triggers an immediate authoritative state refresh without waiting for polling.
-  Future<void> onForegroundMessage({int? notificationId}) async {
-    await pollForUpdates();
+  /// Identifies transfer events from raw payload or authoritative unreads API.
+  Future<void> onForegroundMessage({int? notificationId, RemoteMessage? rawMessage}) async {
+    // 1. Direct inspection: check relatedEntityType in raw payload if present
+    final rawType = (rawMessage?.data['relatedEntityType'] ?? rawMessage?.data['entityType'])
+        ?.toString()
+        .toLowerCase();
+    bool isTransferEvent = rawType == 'stocktransfer';
+
+    // 2. Poll for updates to fetch authoritative AppNotification list from API
+    final newItems = await pollForUpdates();
+
+    // 3. Fallback inspection if not explicitly marked in raw FCM payload:
+    //    Find target notification by notificationId in systemNotifications
+    if (!isTransferEvent && notificationId != null) {
+      final match = systemNotifications.firstWhereOrNull((n) => n.id == notificationId);
+      if (match != null && match.isTransferNotification) {
+        isTransferEvent = true;
+      }
+    }
+
+    // 4. Also check newly arrived items from this polling round
+    if (!isTransferEvent && newItems.any((n) => n.isTransferNotification)) {
+      isTransferEvent = true;
+    }
+
+    // 5. If this event is identified as a merchandise transfer, refresh transfers list
+    if (isTransferEvent) {
+      await refreshTransfers();
+    }
   }
 
   /// Starts background polling every 30 seconds while user is logged in.
@@ -99,60 +204,88 @@ class NotificationController extends GetxController {
   }
 
   /// Loads system notifications, missed inter-site transfers, and stock alerts.
+  /// Individual endpoints are isolated so that a failure in one does not abort others.
   Future<void> loadAll() async {
     status.value = ViewStatus.loading;
     errorMessage.value = null;
 
-    try {
-      final userId = StorageService.instance.userId;
-      final siteId = StorageService.instance.defaultSiteId;
+    final userId = StorageService.instance.userId;
+    final siteId = StorageService.instance.defaultSiteId;
 
-      final results = await Future.wait([
-        _service.fetchUnreads(),
-        if (userId != null && userId > 0)
-          _service.getMissedNotifications(userId)
-        else
-          Future.value(<TransferNotification>[]),
-        _service.fetchStockAlerts(siteId: siteId),
-      ]);
+    final errors = <String>[];
+    List<AppNotification>? unreads;
+    List<TransferNotification>? transfers;
+    List<StockAlert>? alerts;
 
-      final unreads = results[0] as List<AppNotification>;
-      for (final item in unreads) {
+    await Future.wait([
+      _service.fetchUnreads().then((val) {
+        unreads = val;
+      }).catchError((e) {
+        debugPrint('[NotificationController] Failed to fetch unreads: $e');
+        errors.add('notifications ($e)');
+      }),
+      ((userId != null && userId > 0)
+              ? _service.getMissedNotifications(userId)
+              : Future.value(<TransferNotification>[]))
+          .then((val) {
+        transfers = val;
+      }).catchError((e) {
+        debugPrint('[NotificationController] Failed to fetch transfers: $e');
+        errors.add('transferts ($e)');
+      }),
+      _service.fetchStockAlerts(siteId: siteId).then((val) {
+        alerts = val;
+      }).catchError((e) {
+        debugPrint('[NotificationController] Failed to fetch stock alerts: $e');
+        errors.add('alertes de stock ($e)');
+      }),
+    ]);
+
+    if (unreads != null) {
+      for (final item in unreads!) {
         _knownNotificationIds.add(item.id);
       }
-      _isFirstLoad = false;
+      systemNotifications.assignAll(unreads!);
+    }
+    if (transfers != null) {
+      transferNotifications.assignAll(transfers!);
+    }
+    if (alerts != null) {
+      stockAlerts.assignAll(alerts!);
+    }
 
-      systemNotifications.assignAll(unreads);
-      transferNotifications.assignAll(results[1] as List<TransferNotification>);
-      stockAlerts.assignAll(results[2] as List<StockAlert>);
+    _isFirstLoad = false;
 
-      status.value = ViewStatus.success;
-    } catch (e) {
+    if (unreads == null && transfers == null && alerts == null) {
       status.value = ViewStatus.error;
-      errorMessage.value = 'Impossible de charger les notifications: $e';
+      errorMessage.value = 'Impossible de charger les notifications: ${errors.join(', ')}';
+    } else {
+      status.value = ViewStatus.success;
+      if (errors.isNotEmpty) {
+        errorMessage.value = 'Certaines données n\'ont pas pu être chargées: ${errors.join(', ')}';
+      }
     }
   }
 
   /// Silent background update or push-triggered refresh that fetches unreads
   /// and triggers heads-up feedback for newly arrived items.
-  Future<void> pollForUpdates() async {
+  Future<List<AppNotification>> pollForUpdates() async {
     if (_isPolling) {
       _hasPendingRefresh = true;
-      return;
+      return [];
     }
 
     _isPolling = true;
     final currentSeq = ++_pollSequence;
+    final newItems = <AppNotification>[];
 
     try {
       final unreads = await _service.fetchUnreads();
 
       // Discard older responses if a newer poll sequence was initiated
       if (currentSeq < _pollSequence) {
-        return;
+        return [];
       }
-
-      final newItems = <AppNotification>[];
 
       for (final item in unreads) {
         if (!_knownNotificationIds.contains(item.id)) {
@@ -167,7 +300,7 @@ class NotificationController extends GetxController {
 
       if (_isFirstLoad) {
         _isFirstLoad = false;
-        return;
+        return [];
       }
 
       // If new notifications arrived, display heads-up feedback
@@ -180,8 +313,10 @@ class NotificationController extends GetxController {
           }
         }
       }
+      return newItems;
     } catch (_) {
       // Non-blocking silent error during polling
+      return [];
     } finally {
       _isPolling = false;
       if (_hasPendingRefresh) {
@@ -308,10 +443,76 @@ class NotificationController extends GetxController {
       await _service.dismissNotification(id);
       if (isTransfer) {
         transferNotifications.removeWhere((t) => t.id == id);
+        transferDetails.remove(id);
+        loadingTransferDetails.remove(id);
+        errorTransferDetails.remove(id);
+        expandedTransferIds.remove(id);
       } else {
         systemNotifications.removeWhere((n) => n.id == id);
       }
     } catch (_) {}
+  }
+
+  /// Toggles expansion of transferred article line items for a specific transfer card.
+  /// Automatically fetches article details if not already loaded or cached.
+  void toggleTransferExpanded(TransferNotification transfer) {
+    if (expandedTransferIds.contains(transfer.id)) {
+      expandedTransferIds.remove(transfer.id);
+    } else {
+      expandedTransferIds.add(transfer.id);
+      if (!transferDetails.containsKey(transfer.id) &&
+          (transfer.inlineArticles == null || transfer.inlineArticles!.isEmpty)) {
+        loadTransferDetails(transfer);
+      } else if (transfer.inlineArticles != null && transfer.inlineArticles!.isNotEmpty) {
+        transferDetails[transfer.id] = transfer.inlineArticles!;
+      }
+    }
+  }
+
+  /// Fetches transferred merchandise lines from GET /stock/transfers/details without duplicate requests.
+  Future<void> loadTransferDetails(TransferNotification transfer) async {
+    final transferId = transfer.id;
+
+    // Check if already in flight
+    if (loadingTransferDetails[transferId] == true) return;
+
+    // Check if already loaded and non-empty
+    if (transferDetails.containsKey(transferId) && transferDetails[transferId]!.isNotEmpty) {
+      return;
+    }
+
+    loadingTransferDetails[transferId] = true;
+    errorTransferDetails[transferId] = null;
+
+    try {
+      final details = await _service.fetchTransferDetails(
+        originDoc: transfer.exitDocNumber,
+        receiptDoc: transfer.receiptDocNumber,
+      );
+      transferDetails[transferId] = details;
+
+      // If details returned human-readable site names and transfer notification lacked them, enrich the card
+      if (details.isNotEmpty) {
+        final first = details.first;
+        final hasOriginName = first.originSiteName != null && first.originSiteName!.trim().isNotEmpty;
+        final hasDestName = first.destinationSiteName != null && first.destinationSiteName!.trim().isNotEmpty;
+        if ((hasOriginName && transfer.originSiteName == null) ||
+            (hasDestName && transfer.destinationSiteName == null)) {
+          final index = transferNotifications.indexWhere((t) => t.id == transferId);
+          if (index != -1) {
+            transferNotifications[index] = transferNotifications[index].copyWith(
+              originSiteName: hasOriginName ? first.originSiteName : null,
+              destinationSiteName: hasDestName ? first.destinationSiteName : null,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[NotificationController] Failed to load transfer details #$transferId: $e');
+      errorTransferDetails[transferId] = 'Impossible de charger les articles de ce transfert.';
+    } finally {
+      loadingTransferDetails[transferId] = false;
+    }
   }
 
   /// Triggers backend retry of failed notifications.

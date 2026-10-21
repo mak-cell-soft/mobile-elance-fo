@@ -13,4 +13,5 @@ abstract class AppRoutes {
   static const receipts = '/receipts';
   static const production = '/production';
   static const productionDetail = '/production/detail';
+  static const productionPersonnel = '/production/personnel';
 }

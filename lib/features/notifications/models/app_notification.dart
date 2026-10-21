@@ -33,6 +33,12 @@ class AppNotification {
       title.toLowerCase().contains('caisse') ||
       title.toLowerCase().contains("demande d'argent");
 
+  /// True if this notification corresponds to an inter-site merchandise transfer
+  bool get isTransferNotification =>
+      relatedEntityType?.toLowerCase() == 'stocktransfer' ||
+      title.toLowerCase().contains('transfert') ||
+      message.toLowerCase().contains('transfert');
+
   /// Extracts the Chantier ID from actionUrl (e.g. "/chantiers/12?tab=caisse") if available
   int? get chantierIdFromAction {
     if (actionUrl != null && actionUrl!.isNotEmpty) {

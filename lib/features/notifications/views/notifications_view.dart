@@ -12,62 +12,98 @@ import '../models/transfer_notification.dart';
 /// Notification Center View built with Arbor Industrial design principles.
 /// Features tabbed notifications (Inter-site transfers, System notifications, Stock alerts)
 /// with severity badges, quick actions, and pull-to-refresh capabilities.
-class NotificationsView extends GetView<NotificationController> {
+class NotificationsView extends StatefulWidget {
   const NotificationsView({super.key});
+
+  @override
+  State<NotificationsView> createState() => _NotificationsViewState();
+}
+
+class _NotificationsViewState extends State<NotificationsView> with SingleTickerProviderStateMixin {
+  late final NotificationController controller;
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = Get.find<NotificationController>();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_handleTabChange);
+
+    // Reliable refresh whenever the Notifications screen is opened or revisited
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        controller.onScreenOpened();
+      }
+    });
+  }
+
+  void _handleTabChange() {
+    if (_tabController.indexIsChanging && _tabController.index == 0) {
+      // User switched specifically to Transfers tab
+      controller.refreshTransfers();
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabController.removeListener(_handleTabChange);
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Centre de Notifications'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, size: 22),
-              tooltip: 'Actualiser',
-              onPressed: () => controller.loadAll(),
-            ),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert_rounded),
-              onSelected: (value) {
-                if (value == 'read_all') {
-                  controller.markAllAsRead();
-                } else if (value == 'retry') {
-                  controller.retryFailed();
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'read_all',
-                  child: Row(
-                    children: [
-                      Icon(Icons.done_all_rounded, size: 18),
-                      SizedBox(width: 10),
-                      Text('Tout marquer comme lu'),
-                    ],
-                  ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Centre de Notifications'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, size: 22),
+            tooltip: 'Actualiser',
+            onPressed: () => controller.loadAll(),
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (value) {
+              if (value == 'read_all') {
+                controller.markAllAsRead();
+              } else if (value == 'retry') {
+                controller.retryFailed();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'read_all',
+                child: Row(
+                  children: [
+                    Icon(Icons.done_all_rounded, size: 18),
+                    SizedBox(width: 10),
+                    Text('Tout marquer comme lu'),
+                  ],
                 ),
-                const PopupMenuItem(
-                  value: 'retry',
-                  child: Row(
-                    children: [
-                      Icon(Icons.replay_rounded, size: 18),
-                      SizedBox(width: 10),
-                      Text('Renvoyer les échecs'),
-                    ],
-                  ),
+              ),
+              const PopupMenuItem(
+                value: 'retry',
+                child: Row(
+                  children: [
+                    Icon(Icons.replay_rounded, size: 18),
+                    SizedBox(width: 10),
+                    Text('Renvoyer les échecs'),
+                  ],
                 ),
-              ],
-            ),
-          ],
-          bottom: TabBar(
-            labelColor: colorScheme.primary,
-            indicatorColor: colorScheme.primary,
-            isScrollable: false,
-            tabs: [
+              ),
+            ],
+          ),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: colorScheme.primary,
+          indicatorColor: colorScheme.primary,
+          isScrollable: false,
+          tabs: [
               Obx(() => Tab(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -153,6 +189,7 @@ class NotificationsView extends GetView<NotificationController> {
           }
 
           return TabBarView(
+            controller: _tabController,
             children: [
               _buildTransfersTab(context, colorScheme),
               _buildSystemTab(context, colorScheme),
@@ -160,8 +197,7 @@ class NotificationsView extends GetView<NotificationController> {
             ],
           );
         }),
-      ),
-    );
+      );
   }
 
   Widget _buildCountBadge(
@@ -209,12 +245,21 @@ class NotificationsView extends GetView<NotificationController> {
   Widget _buildTransferCard(
       BuildContext context, TransferNotification item, ColorScheme colorScheme) {
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Top Row: Icon, Reference, Dismiss Action
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
@@ -229,49 +274,279 @@ class NotificationsView extends GetView<NotificationController> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Prominent Transfer Reference
                       Text(
                         item.transferRef,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Site Origine: #${item.originSite} → Dest: #${item.destinationSiteId}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.2,
                             ),
+                      ),
+                      const SizedBox(height: 4),
+                      // Human-readable Origin & Destination (strictly no #0)
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              item.displayOriginSite,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 13,
+                              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                            ),
+                          ),
+                          Flexible(
+                            child: Text(
+                              item.displayDestinationSite,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
                 IconButton(
+                  tooltip: 'Supprimer la notification',
                   icon: const Icon(Icons.close_rounded, size: 18),
+                  visualDensity: VisualDensity.compact,
                   onPressed: () => controller.dismiss(item.id, isTransfer: true),
                 ),
               ],
             ),
-            const Divider(height: 24),
+            const Divider(height: 20),
+            // Middle Row: Doc Sortie and Items Count Badge
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 if (item.exitDocNumber.isNotEmpty)
-                  Text(
-                    'Doc Sortie: ${item.exitDocNumber}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.description_outlined,
+                        size: 14,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Doc Sortie: ${item.exitDocNumber}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  const SizedBox.shrink(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                if (item.itemsCount > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHigh,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      '${item.itemsCount} article(s)',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
+                  child: Text(
+                    '${item.itemsCount} article${item.itemsCount > 1 ? 's' : ''}',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                   ),
+                ),
               ],
             ),
+
+            // Expandable Section: Transferred Article Line Items
+            const SizedBox(height: 8),
+            Obx(() {
+              final isExpanded = controller.expandedTransferIds.contains(item.id);
+              final isLoading = controller.loadingTransferDetails[item.id] == true;
+              final errorMsg = controller.errorTransferDetails[item.id];
+              final articles = controller.transferDetails[item.id] ?? item.inlineArticles ?? [];
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  InkWell(
+                    onTap: () => controller.toggleTransferExpanded(item),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isExpanded ? 'Masquer le détail des articles' : 'Voir les articles transférés',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                          Icon(
+                            isExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                            size: 18,
+                            color: colorScheme.primary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (isExpanded) ...[
+                    const SizedBox(height: 8),
+                    if (isLoading)
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        alignment: Alignment.center,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Chargement des articles...',
+                              style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (errorMsg != null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: colorScheme.errorContainer.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.error_outline_rounded, size: 16, color: colorScheme.error),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                errorMsg,
+                                style: TextStyle(fontSize: 12, color: colorScheme.error),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => controller.loadTransferDetails(item),
+                              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                              child: const Text('Réessayer', style: TextStyle(fontSize: 11)),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (articles.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Aucun article détaillé disponible pour ce transfert.',
+                          style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: colorScheme.onSurfaceVariant),
+                        ),
+                      )
+                    else
+                      Container(
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: articles.length,
+                          separatorBuilder: (_, _) => Divider(
+                            height: 1,
+                            color: colorScheme.outlineVariant.withValues(alpha: 0.2),
+                          ),
+                          itemBuilder: (context, idx) {
+                            final art = articles[idx];
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Article Reference & Description
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          art.articleReference.isNotEmpty
+                                              ? art.articleReference
+                                              : 'Article sans référence',
+                                          style: const TextStyle(
+                                            fontFamily: 'monospace',
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        if (art.description.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            art.description,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: colorScheme.onSurfaceVariant,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                        if (art.packageReference != null && art.packageReference!.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Paquet: ${art.packageReference}',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                                              fontFamily: 'monospace',
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Quantity & Unit
+                                  Text(
+                                    '${art.quantity.toStringAsFixed(art.quantity % 1 == 0 ? 0 : 2)}${art.unit != null && art.unit!.isNotEmpty ? ' ${art.unit}' : ''}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: colorScheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ],
+              );
+            }),
           ],
         ),
       ),
@@ -425,10 +700,22 @@ class NotificationsView extends GetView<NotificationController> {
 
   Widget _buildStockAlertCard(
       BuildContext context, StockAlert item, ColorScheme colorScheme) {
+    final qtyUnit = item.unit != null && item.unit!.trim().isNotEmpty ? ' ${item.unit}' : '';
+    final currentStr = item.currentStock % 1 == 0 ? item.currentStock.toInt().toString() : item.currentStock.toStringAsFixed(2);
+    final minStr = item.minThreshold % 1 == 0 ? item.minThreshold.toInt().toString() : item.minThreshold.toStringAsFixed(2);
+
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               padding: const EdgeInsets.all(10),
@@ -443,25 +730,68 @@ class NotificationsView extends GetView<NotificationController> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 1. Prominent Article Reference
                   Text(
-                    item.designation,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Réf: ${item.articleCode}${item.siteName != null ? ' • ${item.siteName}' : ''}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
+                    item.articleReference.isNotEmpty ? item.articleReference : item.designation,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.2,
                         ),
+                  ),
+                  const SizedBox(height: 3),
+                  // 2. Clear Article Description (when available and distinct)
+                  if (item.description.trim().isNotEmpty && item.description != item.articleReference)
+                    Text(
+                      item.description,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  const SizedBox(height: 4),
+                  // 3. Packaging reference badge & site metadata
+                  Row(
+                    children: [
+                      if (item.packageReference != null && item.packageReference!.trim().isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Paquet: ${item.packageReference}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                        if (item.siteName != null && item.siteName!.isNotEmpty) const SizedBox(width: 6),
+                      ],
+                      if (item.siteName != null && item.siteName!.isNotEmpty)
+                        Text(
+                          item.siteName!,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                          ),
+                        ),
+                    ],
                   ),
                 ],
               ),
             ),
+            const SizedBox(width: 10),
+            // Current Stock & Minimum Threshold
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${item.currentStock.toStringAsFixed(0)} en stock',
+                  '$currentStr$qtyUnit en stock',
                   style: TextStyle(
                     color: colorScheme.error,
                     fontWeight: FontWeight.bold,
@@ -470,7 +800,7 @@ class NotificationsView extends GetView<NotificationController> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Min: ${item.minThreshold.toStringAsFixed(0)}',
+                  'Min: $minStr$qtyUnit',
                   style: TextStyle(
                     color: colorScheme.onSurfaceVariant,
                     fontSize: 11,

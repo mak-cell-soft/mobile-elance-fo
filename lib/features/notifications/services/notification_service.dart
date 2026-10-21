@@ -4,6 +4,7 @@ import '../../../core/network/api_client.dart';
 import '../models/app_notification.dart';
 import '../models/stock_alert.dart';
 import '../models/transfer_notification.dart';
+import '../models/transferred_article_item.dart';
 
 /// Service layer communicating with backend notification endpoints.
 /// Directly mirrors `notification.service.ts` from `elance-app.ui`.
@@ -49,6 +50,34 @@ class NotificationService {
         }
       }
       return list;
+    }
+    return [];
+  }
+
+  /// Fetches transferred merchandise lines for an inter-site transfer (`GET /stock/transfers/details`).
+  /// Reuses existing authoritative C# backend endpoint: StockController.GetStockTransfersInfosDetails(originDoc, receiptDoc).
+  Future<List<TransferredArticleItem>> fetchTransferDetails({
+    String? originDoc,
+    String? receiptDoc,
+  }) async {
+    final queryParams = <String, dynamic>{};
+    if (originDoc != null && originDoc.isNotEmpty) {
+      queryParams['originDoc'] = originDoc;
+    }
+    if (receiptDoc != null && receiptDoc.isNotEmpty) {
+      queryParams['receiptDoc'] = receiptDoc;
+    }
+
+    final response = await _dio.get(
+      '/stock/transfers/details',
+      queryParameters: queryParams,
+    );
+    final data = response.data;
+    if (data is List) {
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map((item) => TransferredArticleItem.fromJson(item))
+          .toList();
     }
     return [];
   }
