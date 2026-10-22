@@ -337,21 +337,23 @@ jobs:
           PACKAGE_NAME: ${{ steps.validate-config.outputs.package_name }}
         run: |
           python3 - << 'EOF'
-          import json, os, sys, base64
+          import json, os, sys, base64, shutil
 
           api_env = os.environ.get('API_ENVIRONMENT', 'production').strip().lower()
           if not api_env:
               api_env = 'production'
           flavor = os.environ.get('FLAVOR_NAME', '').strip().lower()
           target_pkg = os.environ.get('PACKAGE_NAME', '').strip()
-          b64_content = os.environ.get('FIREBASE_BASE64', '').strip()
+          secret_b64 = os.environ.get('FIREBASE_BASE64', '').strip()
           runner_temp = os.environ.get('RUNNER_TEMP', '/tmp')
           github_step_summary = os.environ.get('GITHUB_STEP_SUMMARY')
           github_output = os.environ.get('GITHUB_OUTPUT')
           github_env = os.environ.get('GITHUB_ENV')
 
           firebase_status = 'WARNING_MISSING_CONFIG'
-          status_reason = 'Secret FIREBASE_GOOGLE_SERVICES_BASE64 is empty or not set.'
+          status_reason = 'No Firebase configuration found.'
+          config_source = 'NONE'
+          selected_proj_id = ''
           is_ready = False
           is_development = (flavor == 'development' or api_env == 'development')
           is_production = (api_env == 'production' and not is_development)
@@ -359,98 +361,161 @@ jobs:
 
           target_path = 'android/app/google-services.json'
           marker_file = os.path.join(runner_temp, '.firebase_injected')
+          backup_file = os.path.join(runner_temp, 'google-services.json.orig')
+          tenant_config_file = os.path.join(runner_temp, 'tenant_config.json')
+
+          def validate_firebase_data(data, pkg):
+              if not isinstance(data, dict):
+                  return False, '', [], 'WARNING_INVALID_JSON', 'Decoded Firebase configuration is not a JSON object.'
+              proj_id = data.get('project_info', {}).get('project_id', '').strip()
+              if not proj_id:
+                  return False, '', [], 'WARNING_INVALID_PROJECT', 'Missing or empty project_id in project_info.'
+              clients = data.get('client', [])
+              if not isinstance(clients, list):
+                  return False, proj_id, [], 'WARNING_INVALID_JSON', "Field 'client' is missing or not a list."
+              pkgs = [
+                  c.get('client_info', {}).get('android_client_info', {}).get('package_name', '').strip()
+                  for c in clients if isinstance(c, dict)
+              ]
+              if not pkg or pkg not in pkgs:
+                  return False, proj_id, pkgs, 'WARNING_PACKAGE_MISMATCH', f"Firebase packages {pkgs} do not contain required client '{pkg}'."
+              return True, proj_id, pkgs, 'READY', f"Valid Firebase configuration with client '{pkg}' (project: '{proj_id}')."
 
           if is_development:
               firebase_status = 'WARNING_NOT_APPLICABLE'
+              config_source = 'DEVELOPMENT_ISOLATED'
               status_reason = 'Development environment uses isolated development Firebase configuration.'
           elif is_preprod:
               firebase_status = 'WARNING_NOT_APPLICABLE'
+              config_source = 'PREPROD_EXCLUDED'
               status_reason = 'Preproduction environment intentionally excludes Firebase Cloud Messaging.'
           elif not target_pkg:
               firebase_status = 'WARNING_PACKAGE_MISMATCH'
               status_reason = 'Target package name is empty; cannot validate Firebase client.'
-          elif os.path.isfile(target_path):
-              # Workspace configuration pre-exists: validate in place and strictly preserve.
-              # Never overwrite a pre-existing configuration, even when secret is provided.
-              try:
-                  with open(target_path, 'rb') as f:
-                      raw = f.read()
-                  data = json.loads(raw.decode('utf-8'))
-                  proj_id = data.get('project_info', {}).get('project_id', '').strip()
-                  clients = data.get('client', [])
-                  pkgs = [
-                      c.get('client_info', {}).get('android_client_info', {}).get('package_name', '').strip()
-                      for c in clients if isinstance(c, dict)
-                  ]
-                  if proj_id == 'acya-fcm-prod-dispatcher' and target_pkg in pkgs:
-                      firebase_status = 'READY'
-                      status_reason = f"Valid pre-existing workspace google-services.json found with client '{target_pkg}'."
-                      is_ready = True
-                  elif proj_id != 'acya-fcm-prod-dispatcher':
-                      firebase_status = 'WARNING_PROJECT_MISMATCH'
-                      status_reason = f"Pre-existing configuration targets project '{proj_id}' instead of 'acya-fcm-prod-dispatcher'."
-                  else:
-                      firebase_status = 'WARNING_PACKAGE_MISMATCH'
-                      status_reason = f"Pre-existing configuration packages '{pkgs}' do not include required client '{target_pkg}'."
-              except Exception as e:
-                  firebase_status = 'WARNING_INVALID_JSON'
-                  status_reason = f"Pre-existing google-services.json is invalid: {type(e).__name__}"
-          elif not b64_content:
-              firebase_status = 'WARNING_MISSING_CONFIG'
-              status_reason = 'Secret FIREBASE_GOOGLE_SERVICES_BASE64 is not configured and android/app/google-services.json is absent.'
           else:
-              try:
-                  decoded_bytes = base64.b64decode(b64_content)
-              except Exception as e:
-                  decoded_bytes = None
-                  firebase_status = 'WARNING_INVALID_BASE64'
-                  status_reason = f"Failed to base64-decode secret: {type(e).__name__}"
-
-              if decoded_bytes is not None:
+              # Priority 1: Inspect downloaded tenant configuration
+              tenant_b64 = None
+              if os.path.isfile(tenant_config_file):
                   try:
-                      data = json.loads(decoded_bytes.decode('utf-8'))
-                      proj_id = data.get('project_info', {}).get('project_id', '').strip()
-                      clients = data.get('client', [])
-                      pkgs = [
-                          c.get('client_info', {}).get('android_client_info', {}).get('package_name', '').strip()
-                          for c in clients if isinstance(c, dict)
-                      ]
-
-                      if proj_id != 'acya-fcm-prod-dispatcher':
-                          firebase_status = 'WARNING_PROJECT_MISMATCH'
-                          status_reason = f"Firebase project ID is '{proj_id}', expected 'acya-fcm-prod-dispatcher'."
-                      elif target_pkg not in pkgs:
-                          firebase_status = 'WARNING_PACKAGE_MISMATCH'
-                          status_reason = f"Firebase packages '{pkgs}' do not contain required client '{target_pkg}'."
-                      else:
-                          os.makedirs('android/app', exist_ok=True)
-                          with open(target_path, 'wb') as f:
-                              f.write(decoded_bytes)
-
-                          # Mark for cleanup only because the workflow injected this file
-                          with open(marker_file, 'w', encoding='utf-8') as f:
-                              f.write('injected')
-
-                          firebase_status = 'READY'
-                          status_reason = f"Production Firebase configuration validated and injected successfully for '{target_pkg}'."
-                          is_ready = True
+                      with open(tenant_config_file, 'r', encoding='utf-8') as f:
+                          t_cfg = json.load(f)
+                      val = t_cfg.get('googleServicesJsonBase64') or t_cfg.get('google_services_json_base64')
+                      if isinstance(val, str) and val.strip():
+                          tenant_b64 = val.strip()
                   except Exception as e:
                       firebase_status = 'WARNING_INVALID_JSON'
-                      status_reason = f"Failed to parse Firebase configuration JSON: {type(e).__name__}"
+                      status_reason = f"Failed to parse tenant configuration JSON: {type(e).__name__}"
+
+              if tenant_b64 is not None:
+                  # Tenant-specific configuration was supplied; validate it strictly
+                  try:
+                      decoded_bytes = base64.b64decode(tenant_b64)
+                  except Exception as e:
+                      decoded_bytes = None
+                      firebase_status = 'WARNING_INVALID_BASE64'
+                      status_reason = f"Failed to base64-decode tenant Firebase configuration: {type(e).__name__}"
+
+                  if decoded_bytes is not None:
+                      try:
+                          data = json.loads(decoded_bytes.decode('utf-8'))
+                          ok, proj_id, pkgs, code, reason = validate_firebase_data(data, target_pkg)
+                          if ok:
+                              selected_proj_id = proj_id
+                              config_source = 'TENANT_CONFIG'
+                              firebase_status = 'READY'
+                              status_reason = f"Tenant-specific Firebase configuration validated for '{target_pkg}' (project: '{proj_id}')."
+                              is_ready = True
+
+                              # Backup pre-existing workspace file if present
+                              if os.path.isfile(target_path) and not os.path.isfile(backup_file):
+                                  shutil.copy2(target_path, backup_file)
+
+                              os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                              with open(target_path, 'wb') as f:
+                                  f.write(decoded_bytes)
+
+                              with open(marker_file, 'w', encoding='utf-8') as f:
+                                  f.write('injected')
+                          else:
+                              firebase_status = code
+                              status_reason = f"Tenant-specific configuration validation failed: {reason}"
+                      except Exception as e:
+                          firebase_status = 'WARNING_INVALID_JSON'
+                          status_reason = f"Failed to parse tenant Firebase configuration JSON: {type(e).__name__}"
+              else:
+                  # Priority 2: Fall back to repository secret FIREBASE_GOOGLE_SERVICES_BASE64
+                  if secret_b64:
+                      try:
+                          decoded_secret = base64.b64decode(secret_b64)
+                          s_data = json.loads(decoded_secret.decode('utf-8'))
+                          s_ok, s_proj, s_pkgs, s_code, s_reason = validate_firebase_data(s_data, target_pkg)
+                          if s_ok:
+                              selected_proj_id = s_proj
+                              config_source = 'SECRET_FALLBACK'
+                              firebase_status = 'READY'
+                              status_reason = f"Legacy secret Firebase configuration validated for '{target_pkg}' (project: '{s_proj}')."
+                              is_ready = True
+
+                              if os.path.isfile(target_path) and not os.path.isfile(backup_file):
+                                  shutil.copy2(target_path, backup_file)
+
+                              os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                              with open(target_path, 'wb') as f:
+                                  f.write(decoded_secret)
+
+                              with open(marker_file, 'w', encoding='utf-8') as f:
+                                  f.write('injected')
+                          else:
+                              firebase_status = s_code
+                              status_reason = f"Legacy secret configuration does not support client '{target_pkg}': {s_reason}"
+                      except Exception as e:
+                          firebase_status = 'WARNING_INVALID_BASE64' if 'decode' in str(type(e)).lower() else 'WARNING_INVALID_JSON'
+                          status_reason = f"Failed to parse legacy secret Firebase configuration: {type(e).__name__}"
+
+                  # Priority 3: Pre-existing workspace configuration
+                  if not is_ready and os.path.isfile(target_path):
+                      try:
+                          with open(target_path, 'rb') as f:
+                              ws_raw = f.read()
+                          ws_data = json.loads(ws_raw.decode('utf-8'))
+                          ws_ok, ws_proj, ws_pkgs, ws_code, ws_reason = validate_firebase_data(ws_data, target_pkg)
+                          if ws_ok:
+                              selected_proj_id = ws_proj
+                              config_source = 'WORKSPACE_PREEXISTING'
+                              firebase_status = 'READY'
+                              status_reason = f"Valid pre-existing workspace google-services.json found with client '{target_pkg}' (project: '{ws_proj}')."
+                              is_ready = True
+                          else:
+                              if not secret_b64:
+                                  firebase_status = ws_code
+                                  status_reason = f"Pre-existing workspace configuration does not support client '{target_pkg}': {ws_reason}"
+                      except Exception as e:
+                          if not secret_b64:
+                              firebase_status = 'WARNING_INVALID_JSON'
+                              status_reason = f"Pre-existing workspace google-services.json is invalid: {type(e).__name__}"
+
+                  if not is_ready and firebase_status == 'WARNING_MISSING_CONFIG':
+                      status_reason = 'Tenant Firebase configuration is absent in tenant_config.json, secret FIREBASE_GOOGLE_SERVICES_BASE64 is empty, and workspace configuration is absent.'
 
           if github_output and os.path.isfile(github_output):
               with open(github_output, 'a', encoding='utf-8') as f:
                   f.write(f"firebase_status={firebase_status}\n")
                   f.write(f"is_ready={'true' if is_ready else 'false'}\n")
+                  f.write(f"config_source={config_source}\n")
 
           if github_env and os.path.isfile(github_env):
               with open(github_env, 'a', encoding='utf-8') as f:
                   f.write(f"FIREBASE_STATUS={firebase_status}\n")
+                  f.write(f"FIREBASE_CONFIG_SOURCE={config_source}\n")
 
           if github_step_summary and os.path.isfile(github_step_summary):
               with open(github_step_summary, 'a', encoding='utf-8') as f:
                   f.write(f"\n### Firebase FCM Configuration\n")
                   f.write(f"- **Status:** `{firebase_status}`\n")
+                  f.write(f"- **Source:** `{config_source}`\n")
+                  if selected_proj_id:
+                      f.write(f"- **Project ID:** `{selected_proj_id}`\n")
+                  f.write(f"- **Target Package:** `{target_pkg}`\n")
                   f.write(f"- **Details:** {status_reason}\n")
                   f.write(f"- **Static Validation:** {'Passed (Configuration Present)' if is_ready else 'Failed / Inactive'}\n")
                   if not is_ready:
@@ -460,14 +525,14 @@ jobs:
                           f.write(f"> ⚠️ **Notice:** This APK was built with core ERP modules functional. However, Firebase Cloud Messaging push alerts will not be delivered to devices running this artifact.\n")
 
           if is_ready:
-              print(f"::notice title=Firebase Configuration Status::FIREBASE_STATUS=READY — {status_reason}")
+              print(f"::notice title=Firebase Configuration Status::FIREBASE_STATUS=READY ({config_source}) — {status_reason}")
           elif not is_production:
               print(f"::warning title=Firebase Configuration Status::FIREBASE_STATUS={firebase_status} — {status_reason} Compilation will proceed, but FCM push notifications will be disabled.")
           else:
               print(f"::error title=Firebase Production Validation Failed::Production build aborted before compilation. Required FIREBASE_STATUS=READY, got '{firebase_status}' ({status_reason}).")
               sys.exit(1)
 
-          print(f"Firebase configuration handling complete. Status: {firebase_status}")
+          print(f"Firebase configuration handling complete. Status: {firebase_status} (Source: {config_source})")
           EOF
 
       - name: Restore Flutter Dependencies
@@ -759,7 +824,13 @@ jobs:
             rm -f "$STAGED_APK" || true
           fi
 
-          if [ -f "$RUNNER_TEMP/.firebase_injected" ]; then
+          # Restore or remove CI-injected Firebase configuration
+          if [ -f "$RUNNER_TEMP/google-services.json.orig" ]; then
+            echo "Restoring original workspace google-services.json from backup..."
+            cp "$RUNNER_TEMP/google-services.json.orig" android/app/google-services.json
+            rm -f "$RUNNER_TEMP/google-services.json.orig" || true
+          elif [ -f "$RUNNER_TEMP/.firebase_injected" ]; then
             echo "Removing CI-injected Firebase configuration..."
-            rm -f android/app/google-services.json "$RUNNER_TEMP/.firebase_injected" || true
+            rm -f android/app/google-services.json || true
           fi
+          rm -f "$RUNNER_TEMP/.firebase_injected" || true
